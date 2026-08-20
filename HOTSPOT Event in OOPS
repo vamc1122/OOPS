@@ -1,0 +1,749 @@
+*&---------------------------------------------------------------------*
+*& Report ZMM_R_SOB_UPDATE
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_R_SOB_UPDATE                         *
+*& Functional Consultant : Srinivasreddy                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Transaction Code      : YMM_SOB_UPDATE                                 *
+*& Description           : Program to SOB Update          *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*& Data       | TR         | Author  | Description
+*&---------------------------------------------------------------------*
+*& 08-11-2025 |  SHDK924410 | APLUS05 | Initial Developement            *
+*&---------------------------------------------------------------------*
+REPORT zmm_r_sob_update.
+
+CLASS c1 DEFINITION.
+  PUBLIC SECTION.
+DATA : g_grid      TYPE REF TO cl_gui_alv_grid,
+       g_container TYPE REF TO cl_gui_custom_container.
+    METHODS:
+      handle_button_click FOR EVENT hotspot_click OF cl_gui_alv_grid
+        IMPORTING e_row_id e_column_id .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+INCLUDE zmm_i_sob_upd_top.
+*INCLUDE zmm_i_sob_apl_top.
+
+INCLUDE zmm_i_sob_upd_cls.
+*INCLUDE zmm_i_sob_apl_cls.
+
+INCLUDE zmm_i_sob_upd_sub.
+*INCLUDE zmm_i_sob_apl_sub.
+
+START-OF-SELECTION.
+
+  lcl_class=>process_logic( ).
+  lcl_class=>display( ).
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_UPD_TOP
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_UPD_TOP                         *
+*& Functional Consultant : Srinivasreddy                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Transaction Code      : YMM_SOB_UPDATE                                 *
+*& Description           : Program to SOB Update          *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*& Data       | TR         | Author  | Description
+*&---------------------------------------------------------------------*
+*& 08-11-2025 |  SHDK924410 | APLUS05 | Initial Developement            *
+*&---------------------------------------------------------------------*
+TABLES : mara,marc,lfa1.
+
+
+TYPES : BEGIN OF ts_zmm_sob,
+          chk          TYPE char1,
+          part_no      TYPE zmm_sob-part_no,
+          werks        TYPE zmm_sob-werks,
+          qunum        TYPE zmm_sob-qunum,
+          part_name    TYPE zmm_sob-part_name,
+          supplier1    TYPE zmm_sob-supplier1,
+          supplier_nm1 TYPE zmm_sob-supplier_nm1,
+          sup_ut_pr1   TYPE zmm_sob-sup_ut_pr1,
+          ex_sup_sob1  TYPE zmm_sob-ex_sup_sob1,
+          re_sup_sob1  TYPE zmm_sob-re_sup_sob1,
+          supplier2    TYPE zmm_sob-supplier2,
+          supplier_nm2 TYPE zmm_sob-supplier_nm2,
+          sup_ut_pr2   TYPE zmm_sob-sup_ut_pr2,
+          ex_sip_sob2  TYPE zmm_sob-ex_sip_sob2,
+          re_sip_sob2  TYPE zmm_sob-re_sip_sob2,
+          vehicle_ut   TYPE zmm_sob-vehicle_ut,
+          avg_mon_est  TYPE zmm_sob-avg_mon_est,
+          sub_at       TYPE zmm_sob-sub_at,
+          sub_on       TYPE zmm_sob-sub_on,
+          sub_by       TYPE zmm_sob-sub_by,
+          status       TYPE zmm_sob-status,
+          app_status   TYPE zmm_sob-app_status,
+          app_date     TYPE zmm_sob-app_date,
+          upd_sob      TYPE char20,
+          sob_status   TYPE zmm_sob-sob_status,
+          remarks      TYPE zmm_sob-remarks,
+          free_text    TYPE zmm_sob-free_text,
+        END OF ts_zmm_sob,
+
+        BEGIN OF ts_out,
+          srno      TYPE char6,
+          part_no   TYPE zmm_sob-part_no,
+          qunum     TYPE zmm_sob-qunum,
+          supplier1 TYPE zmm_sob-supplier1,
+          status    TYPE char30,
+          remarks   TYPE zmm_sob-remarks,
+        END OF ts_out.
+
+
+DATA : gt_final TYPE TABLE OF ts_zmm_sob,
+       gs_final TYPE ts_zmm_sob.
+DATA : gt_out TYPE TABLE OF ts_out,
+       gs_out TYPE ts_out.
+
+DATA :
+  it_zmm_sob TYPE TABLE OF zmm_sob,
+  gt_zmm_sob TYPE TABLE OF zmm_sob,
+  gs_zmm_sob TYPE  zmm_sob.
+*DATA:
+*      gr_ref2   TYPE REF TO cl_gui_alv_grid,
+*      gs_stable TYPE lvc_s_stbl.
+DATA :obj1        TYPE REF TO c1,
+      it_fieldcat TYPE lvc_t_fcat,
+      it_fcat_upd TYPE lvc_t_fcat.
+*DATA : lt_fcat        TYPE lvc_t_fcat.
+DATA: flag TYPE char1.
+DATA: lv_save TYPE char1.
+DATA: name TYPE vrm_id.
+DATA: ivrm_values TYPE vrm_values.
+DATA : lv_date TYPE RANGE OF zmm_sob-app_status.
+DATA: xvrm_values LIKE LINE OF ivrm_values.
+*DATA : g_grid      TYPE REF TO cl_gui_alv_grid,
+*       g_container TYPE REF TO cl_gui_custom_container.
+DATA : titel TYPE rstabl-title.
+DATA : txt1 TYPE rstabl-txt1,
+       txt2 TYPE rstabl-txt2,
+       txt3 TYPE rstabl-txt3.
+CREATE OBJECT obj1.
+CONSTANTS : c_sset TYPE icon-id VALUE '@3J@'.
+
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001.
+  PARAMETERS :  p_status TYPE zmm_sob-app_status AS LISTBOX VISIBLE LENGTH 10 OBLIGATORY DEFAULT 'Approved'.
+  SELECT-OPTIONS :
+                 s_partno FOR mara-matnr NO INTERVALS ,
+                 s_werks FOR marc-werks NO INTERVALS,
+                 s_lifnr FOR lfa1-lifnr .
+  PARAMETERS   : p_date TYPE zmm_sob-app_date.
+
+SELECTION-SCREEN END OF BLOCK a1.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_status.
+  IF ivrm_values IS INITIAL.
+    name = TEXT-031.
+
+    xvrm_values-key = TEXT-032.
+    xvrm_values-text  = TEXT-032.
+    APPEND xvrm_values TO ivrm_values.
+    CLEAR xvrm_values.
+
+    xvrm_values-key = TEXT-033.
+    xvrm_values-text  =  TEXT-033.
+    APPEND xvrm_values TO ivrm_values.
+    CLEAR xvrm_values.
+
+    xvrm_values-key = TEXT-034.
+    xvrm_values-text  =  TEXT-034.
+    APPEND xvrm_values TO ivrm_values.
+    CLEAR xvrm_values.
+
+    CALL FUNCTION 'VRM_SET_VALUES'
+      EXPORTING
+        id     = name
+        values = ivrm_values.
+  ENDIF.
+
+AT SELECTION-SCREEN ON p_date.
+*  CLEAR :lv_date.
+  lv_date = COND #(
+    WHEN p_date IS INITIAL
+      THEN VALUE #( ( sign = 'I' option = 'BT' low = '00000000' high = '99991231' ) )
+      ELSE VALUE #( ( sign = 'I' option = 'EQ' low = p_date ) ) ).
+
+
+
+*  *&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_UPD_CLS
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_UPD_CLS                         *
+*& Functional Consultant : Srinivasreddy                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Transaction Code      : YMM_SOB_UPDATE                                 *
+*& Description           : Program to SOB Update          *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*& Data       | TR         | Author  | Description
+*&---------------------------------------------------------------------*
+*& 08-11-2025 |  SHDK924410 | APLUS05 | Initial Developement            *
+*&---------------------------------------------------------------------*
+CLASS lcl_class DEFINITION.
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS :
+      fetch_logic,
+      process_logic,
+      field_cat,
+      create_update,
+      fcat_upd,
+      display.
+
+ENDCLASS.
+CLASS lcl_class IMPLEMENTATION.
+  METHOD fetch_logic.
+
+    SELECT * FROM zmm_sob INTO TABLE @it_zmm_sob
+       WHERE part_no   IN @s_partno
+         AND werks     IN @s_werks
+         AND ( supplier1 IN @s_lifnr OR supplier2 IN @s_lifnr )
+         AND app_date IN @lv_date
+         AND app_status = @p_status
+         AND sob_status ne 'Updated'.
+  ENDMETHOD.
+
+  METHOD process_logic.
+    fetch_logic( ).
+
+    IF it_zmm_sob IS NOT INITIAL.
+      LOOP AT it_zmm_sob INTO DATA(wa_zmm_sob).
+        MOVE-CORRESPONDING wa_zmm_sob TO gs_final.
+        IF gs_final-sob_status IS INITIAL.
+          gs_final-sob_status = TEXT-035.
+        ENDIF.
+        IF gs_final-upd_sob IS INITIAL.
+          gs_final-upd_sob = |{ c_sset }Create/Update | ."#notext.
+        ENDIF.
+        APPEND gs_final TO gt_final.
+        CLEAR : gs_final.
+      ENDLOOP.
+    ELSE.
+      MESSAGE TEXT-036 TYPE 'I'.
+      LEAVE LIST-PROCESSING.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD field_cat.
+    it_fieldcat = VALUE #(
+     ( fieldname = 'CHK'          scrtext_l = TEXT-046   outputlen = 'X'   col_opt = 'X' checkbox = 'X' edit = 'X')
+     ( fieldname = 'PART_NO'      scrtext_l = TEXT-003   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'WERKS'        scrtext_l = TEXT-005   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'PART_NAME'    scrtext_l = TEXT-004   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUPPLIER1'    scrtext_l = TEXT-006   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUPPLIER_NM1' scrtext_l = TEXT-007   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUP_UT_PR1'   scrtext_l = TEXT-008   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'EX_SUP_SOB1'  scrtext_l = TEXT-009   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'RE_SUP_SOB1'  scrtext_l = TEXT-010   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUPPLIER2'    scrtext_l = TEXT-011   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUPPLIER_NM2' scrtext_l = TEXT-012   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'SUP_UT_PR2'   scrtext_l = TEXT-013   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'EX_SIP_SOB2'  scrtext_l = TEXT-014   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'RE_SIP_SOB2'  scrtext_l = TEXT-015   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'VEHICLE_UT'   scrtext_l = TEXT-016   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'AVG_MON_EST'  scrtext_l = TEXT-017   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'STATUS'       scrtext_l = TEXT-021   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'APP_STATUS'   scrtext_l = TEXT-022   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'APP_DATE'     scrtext_l = TEXT-023   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'UPD_SOB'      scrtext_l = TEXT-028   outputlen = 'X'   col_opt = 'X' hotspot = 'X')
+     ( fieldname = 'SOB_STATUS'   scrtext_l = TEXT-029   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'QUNUM'        scrtext_l = TEXT-026   outputlen = 'X'   col_opt = 'X')
+*  ( fieldname = 'QUPOS'        scrtext_l = TEXT-027   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'REMARKS'      scrtext_l = TEXT-024   outputlen = 'X'   col_opt = 'X')
+     ( fieldname = 'FREE_TEXT'    scrtext_l = TEXT-030   outputlen = 'X'   col_opt = 'X' edit = 'X')
+     ).
+  ENDMETHOD.
+
+
+  METHOD fcat_upd.
+    it_fcat_upd  = VALUE #(
+         ( fieldname = 'SRNO'         scrtext_l = TEXT-048   outputlen = 'X'   col_opt = 'X')
+         ( fieldname = 'PART_NO'      scrtext_l = TEXT-003   outputlen = 'X'   col_opt = 'X')
+         ( fieldname = 'QUNUM'        scrtext_l = TEXT-026   outputlen = 'X'   col_opt = 'X')
+         ( fieldname = 'SUPPLIER1'    scrtext_l = TEXT-006   outputlen = 'X'   col_opt = 'X')
+         ( fieldname = 'STATUS'       scrtext_l = TEXT-021   outputlen = 'X'   col_opt = 'X')
+         ( fieldname = 'REMARKS'      scrtext_l = TEXT-024   outputlen = 'X'   col_opt = 'X')
+         ).
+  ENDMETHOD.
+
+  METHOD create_update.
+    DATA : ls_equku TYPE equku.
+    DATA : ls_upd TYPE char1 .
+    DATA : quota_no  TYPE qunum,
+           it_equpu  TYPE TABLE OF  equpu,
+           wa_equpu  TYPE equpu,
+           et_return TYPE TABLE OF  bapiret2.
+
+    CLEAR :ls_equku,ls_upd,quota_no.
+    REFRESH : it_equpu,et_return.
+
+    ls_equku-mandt = sy-mandt.
+    ls_equku-matnr = gs_final-part_no.
+    ls_equku-werks = gs_final-werks.
+    ls_equku-bdatu = sy-datum.
+    ls_equku-vdatu = sy-datum  - 30.
+    IF gs_final-qunum IS NOT INITIAL.
+      ls_equku-qunum = gs_final-qunum.
+      ls_equku-kz = 'U'.
+      ls_upd = 'X'.
+    ELSE.
+      ls_equku-qunum = gs_final-qunum.
+      ls_equku-kz = 'I'.
+    ENDIF.
+
+
+    wa_equpu-mandt = sy-mandt.
+    wa_equpu-qunum = gs_final-qunum.
+    wa_equpu-qupos = '001'.
+    wa_equpu-beskz = 'F'.
+    wa_equpu-sobes = '0'.
+    wa_equpu-lifnr = gs_final-supplier1.
+    wa_equpu-quote = gs_final-re_sup_sob1.
+    IF gs_final-qunum IS NOT INITIAL.
+      wa_equpu-kz = 'U'.
+    ELSE.
+      wa_equpu-kz = 'I'.
+    ENDIF.
+    APPEND wa_equpu TO it_equpu.
+    CLEAR : wa_equpu.
+
+    wa_equpu-mandt = sy-mandt.
+    wa_equpu-qunum = gs_final-qunum.
+    wa_equpu-qupos = '002'.
+    wa_equpu-beskz = 'F'.
+    wa_equpu-sobes = '0'.
+    wa_equpu-lifnr = gs_final-supplier2.
+    wa_equpu-quote = gs_final-re_sip_sob2.
+    IF gs_final-qunum IS NOT INITIAL.
+      wa_equpu-kz = 'U'.
+    ELSE.
+      wa_equpu-kz = 'I'.
+    ENDIF.
+    APPEND wa_equpu TO it_equpu.
+    CLEAR : wa_equpu.
+
+
+    CALL FUNCTION 'CNV_PE_S4_QUOTA_ARRANGEMENT'
+      EXPORTING
+        is_equku       = ls_equku
+        iv_update_flag = ls_upd
+      IMPORTING
+        ev_quota_num   = quota_no
+      TABLES
+        it_equpu       = it_equpu
+        et_return      = et_return.
+
+    IF quota_no IS INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+    ENDIF.
+
+    CLEAR :titel,txt1,txt2,txt3.
+
+
+    IF quota_no IS INITIAL.
+      titel = TEXT-037.
+      SORT et_return BY type id number.
+      DELETE ADJACENT DUPLICATES FROM et_return COMPARING type id number.
+      LOOP AT et_return INTO DATA(wa_return) WHERE type = 'E' OR type = 'A'.
+        CLEAR : wa_return-message.
+        CALL FUNCTION 'FORMAT_MESSAGE'
+          EXPORTING
+            id        = wa_return-id
+            lang      = '-D'
+            no        = wa_return-number
+          IMPORTING
+            msg       = wa_return-message
+          EXCEPTIONS
+            not_found = 1
+            OTHERS    = 2.
+        IF sy-subrc <> 0.
+* Implement suitable error handling here
+        ENDIF.
+
+        IF sy-tabix = 1.
+          txt1 = wa_return-message.
+        ELSEIF sy-tabix = 2.
+          txt2 = wa_return-message.
+        ELSEIF sy-tabix = 3.
+          txt3 = wa_return-message.
+          EXIT.
+        ENDIF.
+        CLEAR : wa_return.
+      ENDLOOP.
+*      IF txt1 IS INITIAL.
+*        txt1 = 'Error In BAPI'. ##NO_TEXT
+*      ENDIF.
+      if gs_final-remarks is INITIAL AND gs_final-sob_status is INITIAL.
+      gs_final-remarks = wa_return-message.
+      gs_final-sob_status = TEXT-037.
+      endif.
+*    ELSEIF wa_return-type = 'S' OR quota_no IS NOT INITIAL.
+    ELSE.
+      titel = TEXT-038.
+      txt1 = TEXT-040.
+      gs_final-qunum = quota_no.
+      gs_final-sob_status = TEXT-039.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD display.
+
+    CALL SCREEN 100.
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_UPD_SUB
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_UPD_SUB                         *
+*& Functional Consultant : Srinivasreddy                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Transaction Code      : YMM_SOB_UPDATE                                 *
+*& Description           : Program to SOB Update          *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*& Data       | TR         | Author  | Description
+*&---------------------------------------------------------------------*
+*& 08-11-2025 |  SHDK924410 | APLUS05 | Initial Developement            *
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'STATUS'.
+  SET TITLEBAR 'TITLE'.
+
+
+  IF obj1->g_container IS INITIAL.
+    CREATE OBJECT obj1->g_container
+      EXPORTING
+        container_name              = 'CC_100'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+    IF sy-subrc = 0.
+      CREATE OBJECT obj1->g_grid ##SUBRC_OK
+        EXPORTING
+          i_parent          = obj1->g_container
+        EXCEPTIONS
+          error_cntl_create = 1
+          error_cntl_init   = 2
+          error_cntl_link   = 3
+          error_dp_create   = 4
+          OTHERS            = 5.
+    ENDIF.
+  ENDIF.
+
+*  DATA ls_fcat TYPE lvc_s_fcat.
+
+  lcl_class=>field_cat( ).
+
+  SET HANDLER obj1->handle_button_click FOR obj1->g_grid.
+
+  CALL METHOD obj1->g_grid->set_table_for_first_display
+    CHANGING
+      it_outtab                     = gt_final
+      it_fieldcatalog               = it_fieldcat
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CALL METHOD obj1->g_grid->set_ready_for_input
+    EXPORTING
+      i_ready_for_input = 1.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  DATA l_valid TYPE char1.
+  CALL METHOD obj1->g_grid->check_changed_data
+    IMPORTING
+      e_valid = l_valid.
+  IF sy-ucomm = 'BACK' .
+    READ TABLE gt_final INTO gs_final WITH KEY sob_status = TEXT-039.
+    IF sy-subrc NE 0.
+      lv_save = 'X'.
+    ENDIF.
+    IF flag  = 'X' AND lv_save NE 'X'.
+      MESSAGE TEXT-041 TYPE 'I'.
+    ELSE.
+      SET SCREEN 0.
+      LEAVE SCREEN.
+    ENDIF.
+  ELSEIF sy-ucomm = 'EXIT'.
+    READ TABLE gt_final INTO gs_final WITH KEY sob_status = TEXT-039.
+    IF sy-subrc NE 0.
+      lv_save = 'X'.
+    ENDIF.
+    IF flag  = 'X' AND lv_save NE 'X'.
+      MESSAGE TEXT-041 TYPE 'I'.
+    ELSE.
+      SET SCREEN 0.
+      LEAVE SCREEN.
+    ENDIF.
+  ELSEIF sy-ucomm = 'CANCEL'.
+    READ TABLE gt_final INTO gs_final WITH KEY sob_status = TEXT-039.
+    IF sy-subrc NE 0.
+      lv_save = 'X'.
+    ENDIF.
+    IF flag  = 'X' AND lv_save NE 'X'.
+      MESSAGE TEXT-041 TYPE 'I'.
+    ELSE.
+      SET SCREEN 0.
+      LEAVE SCREEN.
+    ENDIF.
+  ELSEIF sy-ucomm = 'SAVE'.
+
+    REFRESH  gt_zmm_sob.
+    READ TABLE gt_final INTO gs_final WITH KEY sob_status = TEXT-039 chk = abap_true.
+    IF sy-subrc = 0.
+      lv_save = 'X'.
+      LOOP AT gt_final INTO gs_final WHERE sob_status = TEXT-039 AND chk = abap_true.
+
+        MOVE-CORRESPONDING gs_final TO gs_zmm_sob.
+        APPEND gs_zmm_sob TO gt_zmm_sob.
+        MODIFY gt_final FROM gs_final
+         TRANSPORTING sob_status.
+        MODIFY zmm_sob FROM gs_zmm_sob.
+        IF sy-subrc = 0.
+          COMMIT WORK AND WAIT.
+          MESSAGE TEXT-025 TYPE 'S' DISPLAY LIKE 'S'.
+        ENDIF.
+        CLEAR : gt_zmm_sob,gs_final,gs_zmm_sob.
+      ENDLOOP.
+    ELSE.
+      MESSAGE TEXT-043 TYPE 'I'.
+      CLEAR : gs_final.
+    ENDIF.
+
+  ELSEIF sy-ucomm = 'DESELECT'.
+
+    LOOP AT gt_final INTO gs_final WHERE chk = 'X'.
+
+      CLEAR gs_final-chk.
+      MODIFY gt_final FROM gs_final TRANSPORTING chk.
+      CLEAR: gs_final.
+    ENDLOOP.
+  ELSEIF sy-ucomm = 'SELECT'.
+    LOOP AT gt_final INTO gs_final WHERE chk NE 'X'.
+
+      gs_final-chk = 'X'.
+      MODIFY gt_final FROM gs_final TRANSPORTING chk.
+      CLEAR: gs_final.
+    ENDLOOP.
+  ELSEIF sy-ucomm = 'UPDATEALL'.
+
+    REFRESH : gt_out.
+    READ TABLE gt_final INTO gs_final WITH KEY chk = abap_true.
+    IF sy-subrc = 0.
+      SELECT * FROM zmm_sob INTO TABLE @DATA(lt_ymm_sob)
+           WHERE part_no = @gs_final-part_no
+        AND werks = @gs_final-werks .
+      LOOP AT gt_final INTO gs_final WHERE chk EQ abap_true.
+        gs_out-srno = gs_out-srno + 1.
+        IF gs_final-sob_status NE TEXT-039 .
+          READ TABLE lt_ymm_sob INTO DATA(wa_ymm_sob) WITH KEY part_no = gs_final-part_no
+            werks = gs_final-werks qunum = gs_final-qunum.
+          IF wa_ymm_sob IS NOT INITIAL AND wa_ymm_sob-sob_status NE TEXT-039.
+            IF gs_final-qunum IS NOT INITIAL.
+              lcl_class=>create_update( ).
+            ELSE.
+              lcl_class=>create_update( ).
+            ENDIF.
+            IF gs_final-sob_status = TEXT-039.
+              flag = 'X'.
+            ENDIF.
+            MODIFY gt_final FROM gs_final
+             TRANSPORTING sob_status remarks qunum .
+
+            MOVE-CORRESPONDING gs_final TO gs_out.
+            gs_out-remarks = TEXT-045.
+            gs_out-status = gs_final-sob_status.
+            APPEND gs_out TO gt_out.
+          ELSE.
+            MOVE-CORRESPONDING gs_final TO gs_out.
+            gs_out-remarks = TEXT-044.
+            APPEND gs_out TO gt_out.
+          ENDIF.
+        ELSE.
+          MOVE-CORRESPONDING gs_final TO gs_out.
+          gs_out-remarks = TEXT-045.
+          APPEND gs_out TO gt_out.
+        ENDIF.
+        CLEAR: gs_out-remarks,gs_out-part_no,gs_out-qunum,gs_out-supplier1, gs_final.
+      ENDLOOP.
+      CLEAR : gs_out.
+      IF gt_out IS NOT INITIAL.
+        CALL SCREEN 2000.
+      ENDIF.
+      REFRESH : lt_ymm_sob.
+    ELSE.
+      MESSAGE TEXT-047 TYPE 'I' .
+    ENDIF.
+  ENDIF.
+
+ENDMODULE.
+
+
+
+CLASS c1 IMPLEMENTATION.
+  METHOD handle_button_click.
+
+    READ TABLE gt_final INTO gs_final INDEX e_row_id-index.
+    IF sy-subrc = 0 AND gs_final-chk = abap_true.
+      IF gs_final-sob_status NE TEXT-039 .
+        SELECT SINGLE * FROM zmm_sob INTO @DATA(w_ymm_sob)
+             WHERE part_no = @gs_final-part_no
+          AND werks = @gs_final-werks AND qunum = @gs_final-qunum.
+        IF w_ymm_sob IS NOT INITIAL AND w_ymm_sob-sob_status NE TEXT-039.
+          IF gs_final-qunum IS NOT INITIAL.
+            lcl_class=>create_update( ).
+          ELSE.
+            lcl_class=>create_update( ).
+          ENDIF.
+          IF sy-ucomm NE 'UPDATEALL'.
+            CALL FUNCTION 'POPUP_TO_INFORM'
+              EXPORTING
+                titel = titel
+                txt1  = txt1
+                txt2  = txt2
+                txt3  = txt3.
+          ENDIF.
+          IF gs_final-sob_status = TEXT-039.
+            flag = 'X'.
+          ENDIF.
+          MODIFY gt_final FROM gs_final INDEX e_row_id-index
+           TRANSPORTING sob_status remarks qunum.
+        ELSE.
+          MESSAGE TEXT-044 TYPE 'I' .
+        ENDIF.
+
+        CALL METHOD g_grid->refresh_table_display
+          EXCEPTIONS
+            finished = 1
+            OTHERS   = 2.
+        IF sy-subrc <> 0.
+*      * Handle error
+        ENDIF.
+      ELSE.
+        MESSAGE TEXT-045 TYPE 'I' .
+      ENDIF.
+    ELSE.
+      MESSAGE TEXT-047 TYPE 'I' .
+    ENDIF.
+
+    CLEAR: w_ymm_sob,gs_final.
+  ENDMETHOD.
+
+ENDCLASS.
+*&---------------------------------------------------------------------*
+*& Module STATUS_2000 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_2000 OUTPUT.
+  SET PF-STATUS 'STATUS_POPUP'.
+  SET TITLEBAR 'TITLE_POPUP'.
+  CLEAR  obj1->g_container.
+  IF obj1->g_container IS INITIAL.
+    CREATE OBJECT obj1->g_container
+      EXPORTING
+        container_name              = 'CC_POPUP'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+    IF sy-subrc = 0.
+      CREATE OBJECT obj1->g_grid ##SUBRC_OK
+        EXPORTING
+          i_parent          = obj1->g_container
+        EXCEPTIONS
+          error_cntl_create = 1
+          error_cntl_init   = 2
+          error_cntl_link   = 3
+          error_dp_create   = 4
+          OTHERS            = 5.
+    ENDIF.
+  ENDIF.
+
+  lcl_class=>fcat_upd( ).
+
+  CALL METHOD obj1->g_grid->set_table_for_first_display
+    CHANGING
+      it_outtab                     = gt_out
+      it_fieldcatalog               = it_fcat_upd
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_2000  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_2000 INPUT.
+  IF sy-ucomm = 'BACK' .
+    SET SCREEN 0.
+  ELSEIF sy-ucomm = 'EXIT'.
+    SET SCREEN 0.
+  ELSEIF sy-ucomm = 'CANCEL'.
+    SET SCREEN 0.
+  ENDIF.
+ENDMODULE.
