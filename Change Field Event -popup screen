@@ -1,0 +1,678 @@
+*&---------------------------------------------------------------------*
+*& Report ZMM_R_SOBAMENDMENT
+*&-----------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_R_SOBAMENDMENT                         *
+*& Functional Consultant : Srnivasa reddy                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_SOB                                     *
+*& Description           : Program SOB Report to Save the in ZMM_SOB   *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+*& 14.11.2025  | SHDK924060 | APLUS05 | Program SOB Amendment           *
+*&---------------------------------------------------------------------*
+REPORT zmm_r_sobamendment.
+CLASS c1 DEFINITION.
+  PUBLIC SECTION.
+
+    DATA : g_grid      TYPE REF TO cl_gui_alv_grid,
+           g_container TYPE REF TO cl_gui_custom_container,
+           wa_fieldcat TYPE lvc_s_fcat,
+           gt_exclude  TYPE ui_functions,
+           gs_layout   TYPE lvc_s_layo,
+           save_ok     TYPE sy-ucomm,
+           error       TYPE c.
+  METHODS:
+      handle_data_change
+        FOR EVENT data_changed OF cl_gui_alv_grid
+        IMPORTING er_data_changed.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+
+INCLUDE zmm_i_sob_amend_top.
+INCLUDE zmm_i_sob_amend_cls.
+INCLUDE zmm_i_sob_amend_sub.
+
+
+
+START-OF-SELECTION.
+
+  lcl_class=>process_logic( ).
+  lcl_class=>display( ).
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_AMEND_TOP
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_AMEND_TOP                         *
+*& Functional Consultant : Srnivasa reddy                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_SOB                                     *
+*& Description           : Program SOB Report to Save the in ZMM_SOB   *
+*& Package               : ZMM                                         *
+*&---------------------------------------------------------------------*
+*& 14.11.2025  | SHDK924060 | APLUS05 | Initial Development           *
+*&---------------------------------------------------------------------*
+TABLES : ekko.
+
+TYPES :
+  BEGIN OF gty_equk,
+    matnr TYPE equk-matnr,
+    werks TYPE equk-werks,
+    qunum TYPE equk-qunum,
+    maktx TYPE makt-maktx,
+  END OF gty_equk,
+
+  BEGIN OF gty_lifnr_det,
+    qunum TYPE equp-qunum,
+    lifnr TYPE equp-lifnr,
+    qupos TYPE equp-qupos,
+    quote TYPE equp-quote,
+    adrnr TYPE lfa1-adrnr,
+    name1 TYPE adrc-name1,
+  END OF gty_lifnr_det,
+
+  BEGIN OF gty_unit_price_det,
+    matnr TYPE a017-matnr,
+    werks TYPE a017-werks,
+    lifnr TYPE a017-lifnr,
+    knumh TYPE a017-knumh,
+    kbetr TYPE konp-kbetr,
+  END OF gty_unit_price_det,
+
+  BEGIN OF gty_matdoc,
+    matnr TYPE matdoc-matnr,
+    lifnr TYPE matdoc-lifnr,
+    werks TYPE matdoc-werks,
+    bwart TYPE matdoc-bwart,
+    menge TYPE matdoc-menge,
+  END OF gty_matdoc,
+
+
+  BEGIN OF ts_zmm_sob,
+    part_no      TYPE zmm_sob-part_no,
+    werks        TYPE zmm_sob-werks,
+    qunum        TYPE zmm_sob-qunum,
+    part_name    TYPE zmm_sob-part_name,
+    supplier1    TYPE zmm_sob-supplier1,
+    supplier_nm1 TYPE zmm_sob-supplier_nm1,
+    sup_ut_pr1   TYPE zmm_sob-sup_ut_pr1,
+    ex_sup_sob1  TYPE zmm_sob-ex_sup_sob1,
+    re_sup_sob1  TYPE zmm_sob-re_sup_sob1,
+    supplier2    TYPE zmm_sob-supplier2,
+    supplier_nm2 TYPE zmm_sob-supplier_nm2,
+    sup_ut_pr2   TYPE zmm_sob-sup_ut_pr2,
+    ex_sip_sob2  TYPE zmm_sob-ex_sip_sob2,
+    re_sip_sob2  TYPE zmm_sob-re_sip_sob2,
+    vehicle_ut   TYPE zmm_sob-vehicle_ut,
+    avg_mon_est  TYPE zmm_sob-avg_mon_est,
+    sub_at       TYPE zmm_sob-sub_at,
+    sub_on       TYPE zmm_sob-sub_on,
+    sub_by       TYPE zmm_sob-sub_by,
+  END OF ts_zmm_sob.
+DATA :
+  gv_lifnr TYPE lfa1-lifnr,
+  gv_matnr TYPE equk-matnr,
+  gv_werks TYPE equk-werks.
+DATA: gr_ref2   TYPE REF TO cl_gui_alv_grid,
+      gs_stable TYPE lvc_s_stbl.
+
+
+DATA :
+  gt_final         TYPE TABLE OF ts_zmm_sob,
+  gt_final_new     TYPE TABLE OF zmm_sob,
+  gwa_final_new    TYPE zmm_sob,
+  gwa_final        TYPE ts_zmm_sob,
+  lwa_final_screen TYPE zmm_sob.
+DATA: gt_matdoc         TYPE TABLE OF gty_matdoc.
+DATA :obj1        TYPE REF TO c1,
+      it_fieldcat TYPE lvc_t_fcat.
+DATA: it_budat TYPE RANGE OF budat.
+CREATE OBJECT obj1.
+
+CONTROLS :
+  gc_cont TYPE TABLEVIEW USING SCREEN 100.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+  SELECT-OPTIONS :
+   s_lifnr1 FOR gv_lifnr OBLIGATORY NO INTERVALS,
+   s_lifnr2 FOR gv_lifnr OBLIGATORY NO INTERVALS,
+   s_partno FOR gv_matnr NO INTERVALS ,
+   s_werks FOR gv_werks NO INTERVALS .
+  PARAMETERS : p_bsart TYPE ekko-bsart DEFAULT 'ZLP' MODIF ID dis.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-group1 EQ 'DIS'.
+      screen-input = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_AMEND_CLS
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_AMEND_CLS                         *
+*& Functional Consultant : Srnivasa reddy                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_SOB                                     *
+*& Description           : Program SOB Report to Save the in ZMM_SOB   *
+*& Package               : ZMM                                         *
+************************************************************************
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+*& 14.11.2025  | SHDK924060 | APLUS05 | Program SOB Amendment           *
+*&---------------------------------------------------------------------*
+
+CLASS lcl_class DEFINITION FINAL.
+
+  PUBLIC SECTION.
+
+    CLASS-DATA :
+      lt_fcat        TYPE lvc_t_fcat,
+      lobj_container TYPE REF TO cl_gui_custom_container,
+      lobj_gui_grid  TYPE REF TO cl_gui_alv_grid.    "Alv Gui.
+
+    CLASS-DATA :
+      gt_lifnr_det1     TYPE TABLE OF gty_lifnr_det,
+      gt_lifnr_det2     TYPE TABLE OF gty_lifnr_det,
+      gt_unit_price_det TYPE TABLE OF gty_unit_price_det,
+      gt_equk           TYPE TABLE OF gty_equk.
+
+    CLASS-METHODS :
+      fetch_logic,
+      process_logic,
+      field_cat,
+      display.
+
+ENDCLASS.
+
+CLASS lcl_class IMPLEMENTATION.
+
+  METHOD fetch_logic.
+
+    SELECT a~material AS matnr ,
+           a~plant AS werks,
+           a~quotaarrangement AS qunum,
+           b~maktx
+  FROM i_purgquotaarrgmt AS a "i_purgquotaarrgmt(equk cds view)
+  INNER JOIN makt AS b ON b~matnr EQ a~material
+   WHERE a~material IN @s_partno
+      AND a~plant IN @s_werks
+      INTO CORRESPONDING FIELDS OF TABLE @gt_equk. "#EC CI_NO_TRANSFORM.
+
+    IF gt_equk IS NOT INITIAL.
+
+      SELECT b~quotaarrangement AS qunum,
+         b~supplier AS lifnr,
+         b~quotaarrangementitem AS qupos,
+         b~purchasingsourcequota AS quote,
+         c~adrnr,
+         d~name1
+     FROM i_purgquotaarrgmtitem AS b " i_purgquotaarrgmtitem(equp cds view)
+     INNER JOIN lfa1 AS c ON c~lifnr EQ b~supplier
+     INNER JOIN ekko AS e ON e~lifnr EQ c~lifnr AND e~bsart = @p_bsart
+     INNER JOIN adrc AS d ON d~addrnumber EQ c~adrnr
+     FOR ALL ENTRIES IN @gt_equk
+     WHERE ( b~supplier IN @s_lifnr1 OR b~supplier IN @s_lifnr2 )
+     AND b~quotaarrangement EQ @gt_equk-qunum
+     AND e~bsart = @p_bsart
+     AND e~bukrs = '2000'
+     INTO CORRESPONDING FIELDS OF TABLE @gt_lifnr_det1. "#EC CI_NO_TRANSFORM
+
+    ENDIF.
+
+    IF sy-subrc EQ 0.
+
+      SELECT a~matnr,
+             a~werks,
+             a~lifnr,
+             a~knumh,
+             b~kbetr
+      FROM a017 AS a                                    "#EC CI_NOORDER
+      INNER JOIN konp AS b ON b~knumh EQ a~knumh       "#EC CI_BUFFJOIN
+      WHERE a~matnr IN @s_partno
+      AND a~werks IN @s_werks
+      AND ( a~lifnr IN @s_lifnr1 OR a~lifnr IN @s_lifnr2 )
+      AND a~ekorg EQ '2000'
+      AND a~datbi GE @sy-datum
+      AND a~datab LE @sy-datum
+      INTO TABLE @gt_unit_price_det.               "#EC CI_NO_TRANSFORM
+
+
+      it_budat = VALUE #(
+      ( sign = 'I' option = 'BT' low = ( sy-datum - 90 ) high = sy-datum ) ).
+
+      SELECT a~matnr,
+             a~lifnr,
+             a~werks,
+             a~bwart,
+             a~menge
+      FROM matdoc AS a
+      WHERE a~matnr IN @s_partno
+      AND a~werks IN @s_werks
+      AND ( a~lifnr IN @s_lifnr1 OR a~lifnr IN @s_lifnr2 )
+      AND a~bwart IN ( '101', '102' )
+      AND a~budat IN @it_budat
+      INTO TABLE @gt_matdoc.                           "#EC CI_NOFIELD.
+
+    ELSE.
+      MESSAGE TEXT-002 TYPE 'I'.
+      LEAVE LIST-PROCESSING.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD process_logic.
+
+    fetch_logic( ).
+
+    SORT gt_lifnr_det1 BY qunum qupos lifnr.
+
+    LOOP AT gt_lifnr_det1 INTO DATA(lwa_lifnr_det1).
+
+      IF lwa_lifnr_det1-qupos EQ '001'.
+        gwa_final-supplier1    = lwa_lifnr_det1-lifnr.
+        gwa_final-supplier_nm1 = lwa_lifnr_det1-name1.
+        gwa_final-ex_sup_sob1 = lwa_lifnr_det1-quote.
+      ENDIF.
+      IF lwa_lifnr_det1-qupos EQ '002' .
+        gwa_final-supplier2   = lwa_lifnr_det1-lifnr.
+        gwa_final-supplier_nm2 = lwa_lifnr_det1-name1.
+        gwa_final-ex_sip_sob2 = lwa_lifnr_det1-quote.
+      ENDIF.
+      gwa_final-qunum =  lwa_lifnr_det1-qunum.
+
+      READ TABLE gt_equk INTO DATA(lwa_equk) WITH KEY qunum = lwa_lifnr_det1-qunum.
+      IF sy-subrc EQ 0 .
+        gwa_final-part_no      = lwa_equk-matnr.
+        gwa_final-part_name    = lwa_equk-maktx.
+        gwa_final-werks        = lwa_equk-werks.
+      ENDIF.
+
+      READ TABLE gt_unit_price_det INTO DATA(lwa_unit_price_det) WITH KEY matnr = gwa_final-part_no
+                                                                          lifnr = gwa_final-supplier1
+                                                                          werks = gwa_final-werks.
+      IF sy-subrc EQ 0 .
+        gwa_final-sup_ut_pr1 = lwa_unit_price_det-kbetr.
+      ENDIF.
+
+      READ TABLE gt_unit_price_det INTO DATA(lwa_unit_price_det1) WITH KEY matnr = gwa_final-part_no
+                                                                          lifnr = gwa_final-supplier2
+                                                                          werks = gwa_final-werks.
+      IF sy-subrc EQ 0 .
+        gwa_final-sup_ut_pr2 = lwa_unit_price_det1-kbetr.
+      ENDIF.
+
+      gwa_final-sub_at = sy-uzeit.
+      gwa_final-sub_on = sy-datum.
+      gwa_final-sub_by = sy-uname.
+**      ENDIF.
+
+      AT END OF qunum.
+        IF gwa_final-supplier1 IS NOT INITIAL AND gwa_final-supplier2 IS NOT INITIAL.
+          APPEND gwa_final TO gt_final.
+        ENDIF.
+        CLEAR :  gwa_final.
+      ENDAT.
+
+      CLEAR :
+      lwa_equk, lwa_lifnr_det1, lwa_unit_price_det,
+      lwa_unit_price_det1.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD display.
+
+    CALL SCREEN 100.
+
+  ENDMETHOD.
+
+
+
+
+  METHOD field_cat.
+
+    it_fieldcat = VALUE #(
+                    ( fieldname = 'PART_NO'       scrtext_l = TEXT-003    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'WERKS'         scrtext_l = TEXT-005    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'QUNUM'         scrtext_l = TEXT-026    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PART_NAME'     scrtext_l = TEXT-004    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUPPLIER1'     scrtext_l = TEXT-006    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUPPLIER_NM1'  scrtext_l = TEXT-007    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUP_UT_PR1'    scrtext_l = TEXT-008    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'EX_SUP_SOB1'   scrtext_l = TEXT-009    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'RE_SUP_SOB1'   scrtext_l = TEXT-010    outputlen = 'X'     col_opt = 'X' edit = 'X')
+                    ( fieldname = 'SUPPLIER2'     scrtext_l = TEXT-011    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUPPLIER_NM2'  scrtext_l = TEXT-012    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUP_UT_PR2'    scrtext_l = TEXT-013    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'EX_SIP_SOB2'   scrtext_l = TEXT-014    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'RE_SIP_SOB2'   scrtext_l = TEXT-015    outputlen = 'X'     col_opt = 'X' edit = 'X')
+                    ( fieldname = 'VEHICLE_UT'    scrtext_l = TEXT-016    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'AVG_MON_EST'   scrtext_l = TEXT-017    outputlen = 'X'     col_opt = 'X')
+                    ).
+
+  ENDMETHOD.
+ENDCLASS.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZMM_I_SOB_AMEND_SUB
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : ZMM_I_SOB_AMEND_SUB                         *
+*& Functional Consultant : Srnivasa reddy                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_SOB                                     *
+*& Description           : Program SOB Report to Save the in ZMM_SOB   *
+*& Package               : ZMM                                         *
+*&---------------------------------------------------------------------*
+*& 14.11.2025  | SHDK924060 | APLUS05 | Initial Development           *
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'STATUS'.
+  SET TITLEBAR 'TITLE'.
+
+  IF obj1->g_container IS   INITIAL.
+    CREATE OBJECT obj1->g_container
+      EXPORTING
+        container_name              = 'CC'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+    IF sy-subrc = 0.
+      CREATE OBJECT obj1->g_grid ##SUBRC_OK
+        EXPORTING
+          i_parent          = obj1->g_container
+        EXCEPTIONS
+          error_cntl_create = 1
+          error_cntl_init   = 2
+          error_cntl_link   = 3
+          error_dp_create   = 4
+          OTHERS            = 5.
+    ENDIF.
+  ENDIF.
+
+  DATA ls_fcat TYPE lvc_s_fcat.
+
+  lcl_class=>field_cat( ).
+
+  LOOP AT it_fieldcat INTO ls_fcat.
+
+    IF   ls_fcat-fieldname = TEXT-028 "RE_SIP_SOB2'
+      OR ls_fcat-fieldname = TEXT-029 "RE_SUP_SOB1'
+      OR ls_fcat-fieldname = TEXT-030 "SUB_BY'
+      OR ls_fcat-fieldname = TEXT-031 "SUB_ON'
+      OR ls_fcat-fieldname = TEXT-032."SUB_AT'.
+      ls_fcat-edit = 'X'.
+    ELSE.
+      CLEAR ls_fcat-edit.
+    ENDIF.
+    MODIFY it_fieldcat FROM ls_fcat.
+  ENDLOOP.
+  SET HANDLER : obj1->handle_data_change FOR obj1->g_grid.
+  obj1->g_grid->register_edit_event( EXPORTING i_event_id = '19'  ). "19--> Enter may be
+
+  CALL METHOD obj1->g_grid->set_table_for_first_display
+    CHANGING
+      it_outtab                     = gt_final
+      it_fieldcatalog               = it_fieldcat
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CALL METHOD obj1->g_grid->set_ready_for_input
+    EXPORTING
+      i_ready_for_input = 1.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100   INPUT .
+  DATA: l_valid TYPE c.
+  DATA : error TYPE char1.
+  CLEAR : error.
+
+  IF sy-ucomm = 'BACK' OR
+     sy-ucomm = 'EXIT' OR
+     sy-ucomm = 'CANCEL'.
+    LEAVE TO SCREEN 0 .
+  ENDIF.
+  CALL METHOD obj1->g_grid->check_changed_data
+    IMPORTING
+      e_valid = l_valid.
+
+*  IF l_valid IS INITIAL.
+*    CALL FUNCTION 'POPUP_TO_INFORM' ##TEXT_POOL
+*      EXPORTING
+*            titel = text-033 "Input Error'
+*            txt1  = text-035 "No Data is Changed to Save'
+*            txt2  = text-036 "Kindly Fill The Data'
+*        txt3  = ' '.
+*  ELSE.
+  IF sy-ucomm = 'SAVE'.
+    CLEAR gt_final_new.
+
+    DATA(gw_final) = REDUCE ts_zmm_sob(
+                           INIT result = VALUE ts_zmm_sob( )
+                           FOR wa IN gt_final
+                           NEXT result = COND #(
+                           WHEN wa-re_sup_sob1 IS NOT INITIAL
+                           AND wa-re_sip_sob2 IS NOT INITIAL
+                           THEN wa
+        ELSE result ) ).
+
+    IF gw_final IS INITIAL.
+      error = 'X'.
+    ENDIF.
+    IF error = 'X'.
+      CALL FUNCTION 'POPUP_TO_INFORM' ##TEXT_POOL
+        EXPORTING
+          titel = TEXT-033 "Input Error'
+          txt1  = TEXT-035 "No Data is Changed to Save'
+          txt2  = TEXT-036 "Kindly Fill The Data'
+          txt3  = ' '.
+      RETURN.
+    ELSE.
+      LOOP AT gt_final INTO DATA(gs_final_new).
+        IF gs_final_new-re_sup_sob1 IS INITIAL OR gs_final_new-re_sip_sob2 IS INITIAL.
+*        error = 'X'.
+*        EXIT.
+        ELSE.
+          MOVE-CORRESPONDING gs_final_new TO gwa_final_new.
+          gwa_final_new-status = 'WIP'.
+          APPEND gwa_final_new TO gt_final_new.
+        ENDIF.
+      ENDLOOP.
+
+      IF gt_final_new IS NOT INITIAL.
+        MODIFY zmm_sob FROM TABLE gt_final_new.
+        IF sy-subrc = 0.
+          COMMIT WORK AND WAIT.
+          MESSAGE TEXT-025 TYPE 'S'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+
+  ENDIF.
+*  ENDIF.
+ENDMODULE.
+
+
+CLASS c1 IMPLEMENTATION.
+  METHOD handle_data_change .
+
+    TYPES:
+      BEGIN OF t_tabix_rowid,
+        tabix TYPE sy-tabix,
+        rowid TYPE i,
+      END OF t_tabix_rowid.
+    DATA: ls_mod_cells   LIKE LINE OF er_data_changed->mt_mod_cells,
+          ls_del_row     TYPE lvc_s_moce,
+          lt_tabix_rowid TYPE SORTED TABLE OF t_tabix_rowid WITH UNIQUE KEY tabix,
+          ls_tabix_rowid LIKE LINE OF lt_tabix_rowid.
+    DATA : msg1 TYPE char70.
+    DATA : msg2 TYPE char70.
+    LOOP AT er_data_changed->mt_mod_cells INTO ls_mod_cells.
+      READ TABLE lt_tabix_rowid TRANSPORTING NO FIELDS
+        WITH TABLE KEY tabix = ls_mod_cells-tabix.
+
+      IF sy-subrc <> 0.
+        CLEAR ls_tabix_rowid.
+        ls_tabix_rowid-tabix = ls_mod_cells-tabix.
+        ls_tabix_rowid-rowid = ls_mod_cells-row_id.
+        INSERT ls_tabix_rowid INTO TABLE lt_tabix_rowid.
+      ENDIF.
+    ENDLOOP.
+    DATA : t1 TYPE TABLE OF ts_zmm_sob.
+    FIELD-SYMBOLS : <fs_tab>  LIKE t1,
+                    <fs_data> LIKE LINE OF <fs_tab>.
+
+    ASSIGN er_data_changed->mp_mod_rows->* TO <fs_tab>.
+*DATA lv_amt101 TYPE menge_d.
+*  Validate entries
+    LOOP AT <fs_tab> ASSIGNING <fs_data>.
+      READ TABLE lt_tabix_rowid INTO ls_tabix_rowid INDEX sy-tabix.
+
+
+      DATA(lv_amt101) = REDUCE #( INIT sum = CONV matdoc-menge( 0 )
+
+                                        FOR gs_matdoc IN gt_matdoc WHERE ( matnr = <fs_data>-part_no AND
+                                      ( lifnr = <fs_data>-supplier1 OR lifnr = <fs_data>-supplier2 ) AND
+                                                                         werks = <fs_data>-werks     AND
+                                                                          bwart = '101' )
+                                        NEXT sum = sum + gs_matdoc-menge ).
+      DATA(lv_amt102) = REDUCE #( INIT sum = CONV matdoc-menge( 0 )
+
+                                        FOR gs_matdoc IN gt_matdoc WHERE ( matnr = <fs_data>-part_no AND
+                                      ( lifnr = <fs_data>-supplier1 OR lifnr = <fs_data>-supplier2 ) AND
+                                                                            werks = <fs_data>-werks  AND
+                                                                          bwart = '102' )
+                                        NEXT sum = sum + gs_matdoc-menge ).
+      DATA(lv_amt) =  lv_amt101 - lv_amt102.
+
+      IF <fs_data>-re_sup_sob1 IS NOT INITIAL AND <fs_data>-re_sip_sob2 IS NOT INITIAL.
+        IF (  <fs_data>-re_sup_sob1  + <fs_data>-re_sip_sob2 ) NE 100 .
+          msg1 = |Kindly give Revised Supplier 1&2 SOB% Equal to| ##NO_TEXT.
+          msg2 = |100% For Quata No.{ <fs_data>-qunum ALPHA = OUT } | ##NO_TEXT.
+          CALL METHOD er_data_changed->add_protocol_entry
+            EXPORTING
+              i_msgid     = '0K'
+              i_msgno     = '000'
+              i_msgty     = 'E'
+              i_msgv1     = msg1
+              i_msgv2     = msg2
+              i_fieldname = 'RE_SUP_SOB1'
+              i_row_id    = ls_tabix_rowid-rowid.
+        ELSEIF ( <fs_data>-ex_sup_sob1 = <fs_data>-re_sup_sob1 ) OR ( <fs_data>-ex_sip_sob2 = <fs_data>-re_sip_sob2 ).
+          msg1 = | Existing and Revised Supplier SOB% Cannot be| ##NO_TEXT.
+          msg2 = |Equal For Quata No. { <fs_data>-qunum ALPHA = OUT } | ##NO_TEXT .
+          CALL METHOD er_data_changed->add_protocol_entry
+            EXPORTING
+              i_msgid     = '0K'
+              i_msgno     = '000'
+              i_msgty     = 'E'
+              i_msgv1     = msg1
+              i_msgv2     = msg2
+              i_fieldname = 'RE_SUP_SOB1'
+              i_row_id    = ls_tabix_rowid-rowid.
+
+        ELSEIF ( <fs_data>-ex_sup_sob1 > <fs_data>-re_sup_sob1 ) AND ( <fs_data>-ex_sip_sob2 < <fs_data>-re_sip_sob2 ).
+          <fs_data>-vehicle_ut  =  <fs_data>-sup_ut_pr2 - <fs_data>-sup_ut_pr1 .
+          <fs_data>-avg_mon_est = ( lv_amt / 3 ) * <fs_data>-vehicle_ut.
+        ELSEIF ( <fs_data>-re_sup_sob1 > <fs_data>-ex_sup_sob1 ) AND ( <fs_data>-re_sip_sob2 < <fs_data>-ex_sip_sob2 ).
+          <fs_data>-vehicle_ut  =  <fs_data>-sup_ut_pr1 - <fs_data>-sup_ut_pr2 .
+          <fs_data>-avg_mon_est = ( lv_amt / 3 ) * <fs_data>-vehicle_ut.
+        ELSE.
+*          CLEAR <fs_data>-vehicle_ut.
+        ENDIF.
+*        sup_ut_pr1 - sup_ut_pr2
+        CALL METHOD er_data_changed->modify_cell
+          EXPORTING
+            i_row_id    = ls_tabix_rowid-rowid
+            i_fieldname = 'VEHICLE_UT'
+            i_value     = <fs_data>-vehicle_ut.
+        CALL METHOD er_data_changed->modify_cell
+          EXPORTING
+            i_row_id    = ls_tabix_rowid-rowid
+            i_fieldname = 'AVG_MON_EST'
+            i_value     = <fs_data>-avg_mon_est.
+      ELSEIF  <fs_data>-re_sup_sob1 IS INITIAL.
+
+        msg1 = |Please Enter Revised Supplier1 For Quata No.| ##NO_TEXT.
+        msg2 = |{ <fs_data>-qunum ALPHA = OUT }|.
+        CALL METHOD er_data_changed->add_protocol_entry
+          EXPORTING
+            i_msgid     = '0K'
+            i_msgno     = '000'
+            i_msgty     = 'E'
+            i_msgv1     = msg1
+            i_msgv2     = msg2
+            i_fieldname = 'RE_SUP_SOB1'
+            i_row_id    = ls_tabix_rowid-rowid.
+      ELSEIF  <fs_data>-re_sip_sob2 IS INITIAL.
+        msg1 = |Please Enter Revised Supplier2 For Quata No.{ <fs_data>-qunum ALPHA = OUT }| ##NO_TEXT .
+        CALL METHOD er_data_changed->add_protocol_entry
+          EXPORTING
+            i_msgid     = '0K'
+            i_msgno     = '000'
+            i_msgty     = 'E'
+            i_msgv1     = msg1
+            i_fieldname = 'RE_SIP_SOB2'
+            i_row_id    = ls_tabix_rowid-rowid.
+      ENDIF.
+      CLEAR: lv_amt101,lv_amt102,lv_amt.
+    ENDLOOP.
+
+  ENDMETHOD.
+ENDCLASS.
