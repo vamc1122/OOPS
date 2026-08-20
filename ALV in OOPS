@@ -1,0 +1,1527 @@
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : Report                                      *
+*& Functional Consultant : Yogesh/Rajani                               *
+*& Technical Consultant  : Vamsi Krishna Mudunuri                      *
+*& Development Request   : BSOFT-71736                                 *
+*& Transaction Code      : YMM_IPA_NEW                                 *
+*& Description           : New Upload Program for RFQ Creation         *
+*& Package               : ZMM                                         *
+************************************************************************
+*&=======================================================================*
+*& Date       | TR/Change# | Changed by |Description                     *
+*&=======================================================================*
+
+REPORT ymm_info_record_amdmt_ipa_new.
+
+CLASS c1 DEFINITION FINAL.
+
+  PUBLIC SECTION.
+
+    DATA : g_grid      TYPE REF TO cl_gui_alv_grid,
+           g_container TYPE REF TO cl_gui_custom_container.
+
+    CLASS-METHODS :
+      upload_data,
+      process_logic,
+      field_error,
+      download_template,
+      display_error,
+      field_cat,
+      display.
+
+ENDCLASS.
+
+INCLUDE ymm_info_rec_ipa_top.
+INCLUDE ymm_info_rec_ipa_cls.
+INCLUDE ymm_info_rec_ipa_sub.
+
+
+
+START-OF-SELECTION.
+
+if down is NOT INITIAL.
+
+ c1=>download_template( ).
+ELSE.
+  if p_file is INITIAL.
+    MESSAGE text-090 TYPE 'I'.
+    LEAVE LIST-PROCESSING.
+  ELSE.
+  c1=>process_logic( ).
+  IF lv_msg IS INITIAL.
+    c1=>display( ).
+  ENDIF.
+ endif.
+ENDIF.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          YMM_INFO_REC_IPA_TOP
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : INCLUDE                                     *
+*& Functional Consultant : Yogesh/Rajani                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_IPA_NEW                                 *
+*& Description           : New Upload Program for RFQ Creation         *
+*& Package               : ZMM                                         *
+*&---------------------------------------------------------------------*
+
+
+
+TYPES: BEGIN OF ty_update_data,
+         chk            TYPE checkbox,
+         lifnr          TYPE lfm1-lifnr,
+         ekgrp          TYPE ekko-ekgrp,
+         matnr          TYPE mara-matnr,
+         prev_part      TYPE zinfo-prev_part,
+         ekorg          TYPE ekko-ekorg,
+         werks          TYPE t001w-werks,
+         esokz          TYPE eine-esokz,
+         aplfz          TYPE eine-aplfz,
+         norbm          TYPE eine-norbm,
+         mwskz          TYPE eine-mwskz,
+         waers          TYPE waers,
+*         netpr          TYPE eine-netpr,
+         datab          TYPE char10,
+         datbi          TYPE char10,
+         jira_id        TYPE zinfo-zjira_id,
+**         warr_grn       TYPE zpir_warranty-warr_grn,
+**         warr_per       TYPE zpir_warranty-warr_per,
+**         factor         TYPE zpir_warranty-factor,
+**         sup_doc        TYPE zpir_warranty-sup_doc,
+         warr_grn       TYPE string,
+         warr_per       TYPE string,
+         factor         TYPE char20,
+         sup_doc        TYPE string,
+         rfq_no         TYPE char10,
+         del_date       TYPE char10,
+** SOC by Aplus05(Jahnavi)   SHDK925010 <<<<<<
+         mcp            TYPE wrbtr,
+         ppc            TYPE wrbtr,
+         input_rm       TYPE char10,
+         process_cost   TYPE bwert,
+         bop_cost       TYPE bwert,
+         profit         TYPE bwert,
+         packing        TYPE bwert,
+         logistics      TYPE bwert,
+         amorization    TYPE bwert,
+         overheads      TYPE bwert,
+         miscellaneous  TYPE bwert,
+         forex_portion  TYPE bwert,
+         forex_currency TYPE zfcurr,
+         new_prize      TYPE  wrbtr,
+** EOC by Aplus05(Jahnavi)  SHDK925010 >>>>>>
+         remark         TYPE string,
+         error          TYPE char200,
+       END OF ty_update_data.
+
+TYPES : BEGIN OF ty_s_error,
+          srno         TYPE i,
+          msg_err(225) TYPE c,
+        END OF ty_s_error.
+
+TYPES : BEGIN OF ty_info,
+          zrfq_ebeln TYPE zinfo-zrfq_ebeln,
+          zrfq_ebelp TYPE zinfo-zrfq_ebelp,
+          zlifnr     TYPE zinfo-zlifnr,
+          zsa_matnr  TYPE zinfo-zsa_matnr,
+          ekorg      TYPE zinfo-ekorg,
+          zsa_werks  TYPE zinfo-zsa_werks,
+          esokz      TYPE zinfo-esokz,
+          zinfo_type TYPE zinfo-zinfo_type,
+        END OF ty_info.
+TYPES:BEGIN OF ty_final,
+        var1 TYPE string,
+      END OF ty_final.
+
+DATA:lt_final           TYPE TABLE OF ty_final,
+     lt_final1          TYPE TABLE OF string,
+     ls_final           TYPE ty_final,
+     ls_file            TYPE string,
+     lv_data            TYPE string,
+     lv_path            TYPE string,
+     lv_sel_fol         TYPE string,
+     lv_selected_folder TYPE char100,
+     directory(30),
+     lv_filename        TYPE string,
+     lv_path1           TYPE string,
+     lv_fullpath        TYPE string,
+     lv_result          TYPE i,
+     lv_len             TYPE i.
+
+DATA : it_info  TYPE STANDARD TABLE OF ty_info,
+       wa_infor TYPE ty_info.
+
+DATA: it_output TYPE TABLE OF ty_s_error,
+      wa_output LIKE LINE OF it_output.
+DATA: lv_cdate TYPE char10.
+DATA: lv_cdate1 TYPE char10.
+DATA : collec_no TYPE char10.
+DATA : del_date TYPE sy-datum.
+DATA : lv_deldate TYPE char10.
+DATA : ls_num TYPE char4.
+DATA : ls_num1 TYPE char4.
+DATA: lv_item TYPE char4.
+DATA : lv_field1 TYPE char20.
+DATA : lv_field2 TYPE char20.
+DATA : lv_field3 TYPE char20.
+DATA : lv_field4 TYPE char20.
+DATA : lv_field5 TYPE char20.
+DATA: ls_date1 TYPE sy-datum.
+DATA: t_bdcdata LIKE bdcdata OCCURS 0 WITH HEADER LINE.
+DATA: nodata TYPE c VALUE '/'.
+DATA:  opt        TYPE ctu_params.
+DATA:
+  t_msg      TYPE TABLE OF bdcmsgcoll,   " Collecting Error messages
+  w_msg      TYPE bdcmsgcoll,
+  w_msg1(51).
+DATA : lv_flg TYPE char1.
+DATA: lv_srno TYPE char10.
+DATA lv_file TYPE string.
+DATA : wa_info TYPE zinfo.
+DATA: gt_raw_data TYPE STANDARD TABLE OF x255 WITH EMPTY KEY.
+DATA: gv_filelength    TYPE i,
+      gv_headerxstring TYPE xstring.
+DATA: go_excel_ref TYPE REF TO  cl_fdt_xl_spreadsheet.
+
+DATA: it_update_data TYPE TABLE OF ty_update_data,
+      wa_update_data TYPE ty_update_data.
+
+DATA: it_fieldcat   TYPE lvc_t_fcat,
+      it_fcat_error TYPE lvc_t_fcat.
+DATA: lr_fields TYPE RANGE OF fieldname.
+DATA : lv_int    TYPE string,
+       lv_dec    TYPE string,
+       lv_factor TYPE string.
+DATA : lv_len_int TYPE ddleng.
+DATA : lv_len_dec TYPE decimals.
+DATA : lv_msg TYPE char200.
+
+DATA  : lr_esokz TYPE RANGE OF esokz.
+
+DATA : obj1          TYPE REF TO c1.
+DATA : obj2          TYPE REF TO c1.
+CREATE OBJECT obj1.
+CREATE OBJECT obj2.
+
+FIELD-SYMBOLS: <fs>       TYPE STANDARD TABLE,
+               <gwa_fs>   TYPE any,
+               <fs_field> TYPE any.
+
+
+
+SELECTION-SCREEN :BEGIN OF BLOCK b WITH FRAME TITLE TEXT-002.
+  PARAMETERS : p_file TYPE rlgrap-filename MODIF ID r3 .
+  PARAMETERS : p_begcol TYPE i OBLIGATORY DEFAULT 1 MODIF ID dis ##NEEDED,
+               p_endcol TYPE i OBLIGATORY DEFAULT 31 MODIF ID dis,
+               p_begrow TYPE i OBLIGATORY DEFAULT 2,
+               p_endrow TYPE i OBLIGATORY DEFAULT 9999.
+SELECTION-SCREEN : END OF BLOCK b.
+SELECTION-SCREEN :BEGIN OF BLOCK a WITH FRAME TITLE TEXT-001.
+  PARAMETERS :
+    r1 RADIOBUTTON GROUP g1,
+    r2 RADIOBUTTON GROUP g1 ##NEEDED.
+
+SELECTION-SCREEN :END OF BLOCK a.
+SELECTION-SCREEN :BEGIN OF BLOCK c WITH FRAME TITLE TEXT-051.
+  PARAMETERS : down AS CHECKBOX.
+
+SELECTION-SCREEN : END OF BLOCK c.
+
+INITIALIZATION.
+  lr_esokz = VALUE #(
+  ( sign = 'I' option = 'EQ' low = '0' )
+  ( sign = 'I' option = 'EQ' low = '2' )
+  ( sign = 'I' option = 'EQ' low = '3' )
+  ( sign = 'I' option = 'EQ' low = 'P' )
+  ( sign = 'I' option = 'EQ' low = '1' ) ).
+
+  lr_fields = VALUE #(
+  ( sign = 'I' option = 'EQ' low = 'WARR_GRN' )
+  ( sign = 'I' option = 'EQ' low = 'FACTOR' )
+  ( sign = 'I' option = 'EQ' low = 'SUP_DOC' )
+  ( sign = 'I' option = 'EQ' low = 'WARR_PER' )
+  ( sign = 'I' option = 'EQ' low = 'REMARK' ) ).
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-group1 EQ 'DIS'.
+      screen-input = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+
+  CALL FUNCTION 'F4_FILENAME'
+    EXPORTING
+      program_name  = syst-cprog
+      dynpro_number = syst-dynnr
+      field_name    = ' '
+    IMPORTING
+      file_name     = p_file.
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          YMM_INFO_REC_IPA_CLS
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : INCLUDE                                     *
+*& Functional Consultant : Yogesh/Rajani                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_IPA_NEW                                 *
+*& Description           : New Upload Program for RFQ Creation         *
+*& Package               : ZMM                                         *
+*&---------------------------------------------------------------------*
+
+
+CLASS c1 IMPLEMENTATION.
+
+  METHOD upload_data.
+    lv_file = p_file.
+    CLEAR : gv_filelength,gv_headerxstring,it_update_data, wa_update_data, gt_raw_data.
+    CALL METHOD cl_gui_frontend_services=>gui_upload
+      EXPORTING
+        filename                = lv_file
+        filetype                = 'BIN'
+      IMPORTING
+        filelength              = gv_filelength
+        header                  = gv_headerxstring
+      CHANGING
+        data_tab                = gt_raw_data
+      EXCEPTIONS
+        file_open_error         = 1
+        file_read_error         = 2
+        no_batch                = 3
+        gui_refuse_filetransfer = 4
+        invalid_type            = 5
+        no_authority            = 6
+        unknown_error           = 7
+        bad_data_format         = 8
+        header_not_allowed      = 9
+        separator_not_allowed   = 10
+        header_too_long         = 11
+        unknown_dp_error        = 12
+        access_denied           = 13
+        dp_out_of_memory        = 14
+        disk_full               = 15
+        dp_timeout              = 16
+        not_supported_by_gui    = 17
+        error_no_gui            = 18
+        OTHERS                  = 19.
+
+    IF sy-subrc IS INITIAL AND gt_raw_data IS NOT INITIAL.
+      CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
+        EXPORTING
+          input_length = gv_filelength
+        IMPORTING
+          buffer       = gv_headerxstring
+        TABLES
+          binary_tab   = gt_raw_data
+        EXCEPTIONS
+          failed       = 1
+          OTHERS       = 2.
+      IF sy-subrc IS INITIAL.
+        TRY .
+            go_excel_ref = NEW cl_fdt_xl_spreadsheet(
+                                    document_name = lv_file
+                                   xdocument     = gv_headerxstring ) .
+          CATCH cx_fdt_excel_core ##NO_HANDLER.
+        ENDTRY .
+      ENDIF.
+
+
+      "Get List of Worksheets
+      go_excel_ref->if_fdt_doc_spreadsheet~get_worksheet_names(
+         IMPORTING
+           worksheet_names = DATA(gt_worksheets) ).
+      IF NOT gt_worksheets IS INITIAL.
+        DATA(lw_woksheetname) = VALUE #( gt_worksheets[ 1 ] OPTIONAL ).
+        DATA(go_data_ref) = go_excel_ref->if_fdt_doc_spreadsheet~get_itab_from_worksheet(
+                                                lw_woksheetname ).
+        ASSIGN go_data_ref->* TO <fs>.
+      ENDIF.
+
+      LOOP AT <fs> ASSIGNING <gwa_fs> FROM p_begrow TO p_endrow. "row restriction
+        DO p_endcol TIMES. "column restriction
+          ASSIGN COMPONENT sy-index OF STRUCTURE <gwa_fs> TO <fs_field>.
+          IF sy-subrc = 0.
+            CASE sy-index.
+              WHEN 1.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-lifnr = <fs_field>.
+                  wa_update_data-lifnr = |{ wa_update_data-lifnr ALPHA = IN }|.
+                ENDIF.
+*              WHEN 2.
+*                IF <fs_field> IS NOT INITIAL.
+*                  wa_update_data-ekgrp  = <fs_field>.
+*                ENDIF.
+              WHEN 2.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-matnr = <fs_field>.
+                ENDIF.
+              WHEN 3.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-prev_part = <fs_field>.
+                ENDIF.
+              WHEN 4.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-ekorg = <fs_field>.
+                ENDIF.
+              WHEN 5.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-werks = <fs_field>.
+                ENDIF.
+              WHEN 6.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-esokz = <fs_field>.
+                ENDIF.
+              WHEN 7.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-aplfz = <fs_field>.
+                ENDIF.
+              WHEN 8.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-norbm = <fs_field>.
+                ENDIF.
+              WHEN 9.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-mwskz = <fs_field>.
+                ENDIF.
+              WHEN 10.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-waers = <fs_field>.
+                ENDIF.
+              WHEN 11.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-datab = <fs_field>.
+                ENDIF.
+              WHEN 12.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-datbi = <fs_field>.
+                ENDIF.
+              WHEN 13.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-jira_id = <fs_field>.
+                ENDIF.
+** SOC by Aplus05(Jahnavi)   SHDK925010 <<<<<<
+              WHEN 14.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-mcp = <fs_field>.
+                ENDIF.
+              WHEN 15.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-ppc = <fs_field>.
+                ENDIF.
+              WHEN 16.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-input_rm = <fs_field>.
+                ENDIF.
+              WHEN 17.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-process_cost = <fs_field>.
+                ENDIF.
+              WHEN 18.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-bop_cost = <fs_field>.
+                ENDIF.
+              WHEN 19.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-profit = <fs_field>.
+                ENDIF.
+              WHEN 20.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-packing = <fs_field>.
+                ENDIF.
+              WHEN 21.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-logistics = <fs_field>.
+                ENDIF.
+              WHEN 22.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-amorization = <fs_field>.
+                ENDIF.
+              WHEN 23.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-overheads = <fs_field>.
+                ENDIF.
+              WHEN 24.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-miscellaneous = <fs_field>.
+                ENDIF.
+              WHEN 25.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-forex_portion = <fs_field>.
+                ENDIF.
+              WHEN 26.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-forex_currency = <fs_field>.
+                ENDIF.
+** EOC by Aplus05(Jahnavi)  SHDK925010 >>>>>>
+              WHEN 27.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-warr_grn = <fs_field>.
+                ENDIF.
+              WHEN 28.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-warr_per = <fs_field>.
+                ENDIF.
+              WHEN 29.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-factor = <fs_field>.
+                ENDIF.
+              WHEN 30.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-sup_doc = <fs_field>.
+                ENDIF.
+              WHEN 31.
+                IF <fs_field> IS NOT INITIAL.
+                  wa_update_data-remark = <fs_field>.
+                ENDIF.
+            ENDCASE.
+          ENDIF.
+        ENDDO.
+
+        wa_update_data-new_prize = wa_update_data-input_rm + wa_update_data-process_cost + wa_update_data-bop_cost +
+                                   wa_update_data-profit + wa_update_data-packing + wa_update_data-logistics + wa_update_data-amorization +
+                                   wa_update_data-overheads + wa_update_data-miscellaneous.
+
+        IF wa_update_data IS NOT INITIAL.
+          APPEND wa_update_data TO it_update_data.
+        ENDIF.
+        CLEAR : wa_update_data.
+      ENDLOOP.
+
+    ELSE.
+      MESSAGE TEXT-091 TYPE 'I'. "'No Data Found in Uploaded File'
+      LEAVE LIST-PROCESSING.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD process_logic.
+
+    upload_data( ).
+
+    DATA :
+      lv_datum TYPE sy-datum,
+      lv_datab TYPE sy-datum,
+      lv_datbi TYPE sy-datum..
+
+    IF it_update_data IS NOT INITIAL.
+
+      SELECT zrfq_ebeln
+             zrfq_ebelp
+             zlifnr
+             zsa_matnr
+             ekorg
+             zsa_werks
+             esokz
+             zinfo_type
+         FROM zinfo INTO TABLE it_info FOR ALL ENTRIES IN it_update_data
+       WHERE zlifnr     = it_update_data-lifnr
+         AND zsa_matnr  = it_update_data-matnr
+         AND ekorg      = it_update_data-ekorg
+         AND zsa_werks  = it_update_data-werks
+         AND esokz      = it_update_data-esokz
+         AND zinfo_type = 'YMM_IPA_NEW'.
+
+    SELECT lifnr,
+           matnr,
+           werks,
+           esokz,
+           ekorg
+    FROM a017 INTO TABLE @DATA(it_a017)
+            FOR ALL ENTRIES IN @it_update_data
+    WHERE matnr = @it_update_data-matnr
+    AND   werks = @it_update_data-werks
+    AND   lifnr = @it_update_data-lifnr.
+
+      SELECT lifnr,ekorg,waers FROM lfm1
+            INTO TABLE @DATA(it_lfm1)
+            FOR ALL ENTRIES IN @it_update_data
+            WHERE lifnr = @it_update_data-lifnr
+            AND ekorg = @it_update_data-ekorg.
+
+      SELECT matnr,werks,ekgrp FROM marc
+        INTO TABLE @DATA(it_marc)
+        FOR ALL ENTRIES IN @it_update_data
+        WHERE matnr = @it_update_data-matnr
+         AND werks  = @it_update_data-werks.
+
+      SELECT matnr FROM mara INTO TABLE @DATA(it_mara)
+        FOR ALL ENTRIES IN @it_update_data
+        WHERE matnr = @it_update_data-matnr.
+
+      SELECT werks, ekorg FROM t001w INTO TABLE @DATA(it_t001w)
+         FOR ALL ENTRIES IN @it_update_data WHERE werks = @it_update_data-werks
+        AND ekorg = @it_update_data-ekorg.
+
+      SELECT mwskz FROM eine INTO TABLE @DATA(it_eine)
+        FOR ALL ENTRIES IN @it_update_data
+        WHERE mwskz = @it_update_data-mwskz.
+
+      SELECT tabname, fieldname,as4local,datatype,leng,decimals,domname FROM dd03l
+        INTO TABLE @DATA(it_dd03l)
+        WHERE tabname = 'ZPIR_WARRANTY'
+        AND as4local = 'A'
+        AND fieldname IN @lr_fields.
+
+      LOOP AT it_update_data INTO wa_update_data.
+
+        IF wa_update_data-lifnr IS INITIAL.
+          lv_msg = TEXT-033.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-ekorg IS INITIAL .
+          lv_msg = TEXT-034.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-matnr IS INITIAL .
+          lv_msg = TEXT-035.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-prev_part IS INITIAL .
+          lv_msg = TEXT-036.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-ekorg IS INITIAL .
+          lv_msg = TEXT-038.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-werks IS INITIAL .
+          lv_msg = TEXT-039.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-esokz IS INITIAL .
+          lv_msg = TEXT-040.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-aplfz IS INITIAL .
+          lv_msg = TEXT-041.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-norbm IS INITIAL .
+          lv_msg = TEXT-042.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-mwskz IS INITIAL .
+          lv_msg = TEXT-043.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+*        ELSEIF wa_update_data-netpr IS INITIAL .
+*          lv_msg = TEXT-044.
+*          MESSAGE lv_msg TYPE 'I'.
+*          EXIT.
+        ELSEIF wa_update_data-datab IS INITIAL .
+          lv_msg = TEXT-045.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-datbi IS INITIAL .
+          lv_msg = TEXT-046.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ELSEIF wa_update_data-jira_id IS INITIAL .
+          lv_msg = TEXT-047.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+** SOC by Aplus05(Jahnavi)   SHDK925010 <<<<<<
+        ELSEIF wa_update_data-datab IS NOT INITIAL.
+          CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+            EXPORTING
+              date_external            = wa_update_data-datab
+            IMPORTING
+              date_internal            = lv_datum
+            EXCEPTIONS
+              date_external_is_invalid = 1
+              OTHERS                   = 2.
+          IF sy-subrc <> 0.
+* Implement suitable error handling here
+          ENDIF.
+          IF lv_datum NE sy-datum.
+            lv_msg = TEXT-110.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+        CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+          EXPORTING
+            date_external            = wa_update_data-datbi
+          IMPORTING
+            date_internal            = lv_datbi
+          EXCEPTIONS
+            date_external_is_invalid = 1
+            OTHERS                   = 2.
+        IF sy-subrc <> 0.
+* Implement suitable error handling here
+        ENDIF.
+        lv_datab = lv_datum.
+        IF lv_datab > lv_datbi .
+          lv_msg = TEXT-109.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ENDIF.
+** EOC by Aplus05(Jahnavi)  SHDK925010 >>>>>>
+
+        IF r1 = abap_true.
+          IF wa_update_data-warr_grn IS INITIAL.
+            lv_msg = TEXT-048.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ELSEIF wa_update_data-warr_per IS INITIAL .
+            lv_msg = TEXT-049.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ELSEIF wa_update_data-factor IS INITIAL .
+            lv_msg = TEXT-050.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+*        IF wa_update_data-netpr IS NOT INITIAL AND wa_update_data-netpr LT 0.
+*          lv_msg = | In Vendor { wa_update_data-lifnr } Net Price is in Negative { wa_update_data-netpr } in Upload File. Kindly Check | ##NO_TEXT.
+*          MESSAGE lv_msg TYPE 'I'.
+*          EXIT.
+*        ENDIF.
+
+        READ TABLE it_a017 INTO DATA(wa_a017) WITH KEY matnr = wa_update_data-matnr
+                                                       lifnr = wa_update_data-lifnr
+                                                       esokz = wa_update_data-esokz
+                                                       werks = wa_update_data-werks
+                                                       ekorg = wa_update_data-ekorg.
+        IF sy-subrc = 0.
+          lv_msg = | Given { wa_update_data-matnr } & { wa_update_data-lifnr } Combination Info Record Already Available | .
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ENDIF.
+
+        READ TABLE it_info INTO wa_infor WITH KEY zsa_matnr = wa_update_data-matnr
+                                                  zlifnr    = wa_update_data-lifnr
+                                                  esokz      = wa_update_data-esokz
+                                                  zsa_werks  = wa_update_data-werks
+                                                  ekorg      = wa_update_data-ekorg.
+        IF sy-subrc = 0.
+          lv_msg = TEXT-031.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ENDIF.
+
+        IF wa_update_data-lifnr IS NOT INITIAL.
+          READ TABLE it_lfm1 TRANSPORTING NO FIELDS WITH KEY lifnr = wa_update_data-lifnr.
+          IF sy-subrc NE 0.
+            lv_msg = | Vendor Number { wa_update_data-lifnr } Not Available in SAP | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+*        IF wa_update_data-ekgrp IS NOT INITIAL.
+*          READ TABLE it_t024 TRANSPORTING NO FIELDS WITH KEY ekgrp = wa_update_data-ekgrp.
+*          IF sy-subrc NE 0.
+*            lv_msg = | Purchasing Group { wa_update_data-ekgrp } Not Available in SAP | ##NO_TEXT.
+*            MESSAGE lv_msg TYPE 'I'.
+*            EXIT.
+*          ENDIF.
+*        ENDIF.
+
+        IF wa_update_data-matnr IS NOT INITIAL.
+          READ TABLE it_mara TRANSPORTING NO FIELDS WITH KEY matnr = wa_update_data-matnr.
+          IF sy-subrc NE 0.
+            lv_msg = | Material { wa_update_data-matnr } Not Available in SAP| ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-ekorg IS NOT INITIAL AND wa_update_data-ekorg NE '2000'.
+          lv_msg = | Pur. Org Only '2000' Must be Consider| ##NO_TEXT.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+        ENDIF.
+*        ENDIF.
+
+        IF wa_update_data-werks IS NOT INITIAL.
+          READ TABLE it_t001w TRANSPORTING NO FIELDS WITH KEY werks = wa_update_data-werks.
+          IF sy-subrc NE 0.
+            lv_msg = | Plant { wa_update_data-werks } Not Available in SAP | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-esokz IS NOT INITIAL.
+          READ TABLE lr_esokz TRANSPORTING NO FIELDS WITH KEY low = wa_update_data-esokz.
+          IF sy-subrc NE 0.
+            lv_msg = | Info Record Type { wa_update_data-esokz } Not Available in SAP | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-mwskz IS NOT INITIAL.
+          READ TABLE it_eine TRANSPORTING NO FIELDS WITH KEY mwskz = wa_update_data-mwskz.
+          IF sy-subrc NE 0.
+            lv_msg = | Tax Code { wa_update_data-mwskz } Not Available in SAP| ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-warr_grn IS NOT INITIAL.
+          READ TABLE it_dd03l INTO DATA(wa_dd03l) WITH KEY fieldname = 'WARR_GRN'.
+          IF sy-subrc = 0 AND strlen( wa_update_data-warr_grn ) LE wa_dd03l-leng.
+          ELSE.
+            lv_msg = | Warranty Date Effective From { wa_update_data-warr_grn } Crossed Length { wa_dd03l-leng } | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-warr_per IS NOT INITIAL.
+          READ TABLE it_dd03l INTO wa_dd03l WITH KEY fieldname = 'WARR_PER'.
+          IF sy-subrc = 0 AND strlen( wa_update_data-warr_per ) LE wa_dd03l-leng.
+          ELSE.
+            lv_msg = | Warranty Period { wa_update_data-warr_per } Crossed Length { wa_dd03l-leng } | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-factor IS NOT INITIAL.
+          CLEAR : lv_factor,lv_int,lv_dec.
+          lv_factor = wa_update_data-factor.
+          SPLIT lv_factor AT '.' INTO lv_int lv_dec.
+          lv_len_int = strlen( lv_int ).
+          IF lv_dec IS NOT INITIAL.
+            lv_len_dec = strlen( lv_dec ).
+**            lv_len_dec = lv_len_dec  - 1 .
+          ENDIF.
+          READ TABLE it_dd03l INTO wa_dd03l WITH KEY fieldname = 'FACTOR'.
+          IF sy-subrc = 0.
+            IF ( lv_len_int LE wa_dd03l-leng ) AND ( lv_len_dec LE wa_dd03l-decimals ).
+            ELSE.
+              lv_msg = |Z Factor { wa_update_data-factor } Crossed Length { wa_dd03l-leng } { wa_dd03l-decimals } |.
+              MESSAGE lv_msg TYPE 'I'.
+              EXIT.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+        IF wa_update_data-sup_doc IS NOT INITIAL.
+          READ TABLE it_dd03l INTO wa_dd03l WITH KEY fieldname = 'SUP_DOC'.
+          IF sy-subrc = 0 AND strlen( wa_update_data-sup_doc ) LE wa_dd03l-leng.
+          ELSE.
+            lv_msg = | Supp. Doc { wa_update_data-sup_doc } Crossed Length { wa_dd03l-leng } | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+        IF wa_update_data-waers IS NOT INITIAL .
+          READ TABLE it_lfm1 INTO DATA(wa_lfm1) WITH KEY lifnr = wa_update_data-lifnr.
+          if wa_update_data-waers ne wa_lfm1-waers.
+          lv_msg = TEXT-037.
+          MESSAGE lv_msg TYPE 'I'.
+          EXIT.
+         endif.
+        ENDIF.
+        IF wa_update_data-remark IS NOT INITIAL.
+          READ TABLE it_dd03l INTO wa_dd03l WITH KEY fieldname = 'REMARK'.
+          IF sy-subrc = 0 AND strlen( wa_update_data-remark ) LE wa_dd03l-leng.
+          ELSE.
+            lv_msg = | Remarks { wa_update_data-remark } Crossed Length { wa_dd03l-leng } | ##NO_TEXT.
+            MESSAGE lv_msg TYPE 'I'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+        READ TABLE it_marc INTO DATA(wa_marc) WITH KEY matnr = wa_update_data-matnr werks = wa_update_data-werks.
+        IF sy-subrc = 0.
+         wa_update_data-ekgrp = wa_marc-ekgrp.
+        ENDIF.
+
+        MODIFY it_update_data FROM wa_update_data TRANSPORTING ekgrp
+        WHERE matnr = wa_update_data-matnr AND werks = wa_update_data-werks.
+
+        CLEAR: wa_update_data, lv_datum, lv_datab,
+               lv_datbi.
+      ENDLOOP.
+
+
+    ELSE.
+      MESSAGE TEXT-003 TYPE 'I'.
+      LEAVE LIST-PROCESSING.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD display.
+
+    CALL SCREEN 100.
+
+  ENDMETHOD.
+
+  METHOD field_cat.
+
+    it_fieldcat = VALUE #(
+                    ( fieldname = 'CHK'             scrtext_l = TEXT-004    outputlen = 'X'     checkbox = 'X' col_opt = 'X' edit = 'X')
+                    ( fieldname = 'LIFNR'           scrtext_l = TEXT-005    outputlen = 'X'     col_opt = 'X')
+*                    ( fieldname = 'EKGRP'           scrtext_l = TEXT-006    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'MATNR'           scrtext_l = TEXT-007    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PREV_PART'       scrtext_l = TEXT-008    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'EKORG'           scrtext_l = TEXT-009    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'WERKS'           scrtext_l = TEXT-010    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'ESOKZ'           scrtext_l = TEXT-011    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'APLFZ'           scrtext_l = TEXT-012    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'NORBM'           scrtext_l = TEXT-013    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'MWSKZ'           scrtext_l = TEXT-014    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'WAERS'           scrtext_l = TEXT-006    outputlen = 'X'     col_opt = 'X')
+*                    ( fieldname = 'NETPR'           scrtext_l = TEXT-015    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'DATAB'           scrtext_l = TEXT-016    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'DATBI'           scrtext_l = TEXT-017    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'JIRA_ID'         scrtext_l = TEXT-018    outputlen = 'X'     col_opt = 'X')
+** SOC by Aplus05(Jahnavi)   SHDK925010 <<<<<<
+                    ( fieldname = 'MCP'             scrtext_l = TEXT-095    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PPC'             scrtext_l = TEXT-096    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'INPUT_RM'        scrtext_l = TEXT-097    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PROCESS_COST'    scrtext_l = TEXT-098    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'BOP_COST'        scrtext_l = TEXT-099    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PROFIT'          scrtext_l = TEXT-100    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'PACKING'         scrtext_l = TEXT-101    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'LOGISTICS'       scrtext_l = TEXT-102    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'AMORIZATION'     scrtext_l = TEXT-103    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'OVERHEADS'       scrtext_l = TEXT-104    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'MISCELLANEOUS'   scrtext_l = TEXT-105    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'FOREX_PORTION'   scrtext_l = TEXT-106    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'FOREX_CURRENCY'  scrtext_l = TEXT-107    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'NEW_PRIZE'       scrtext_l = TEXT-108    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'WARR_GRN'        scrtext_l = TEXT-019    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'WARR_PER'        scrtext_l = TEXT-020    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'FACTOR'          scrtext_l = TEXT-021    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'SUP_DOC'         scrtext_l = TEXT-022    outputlen = 'X'     col_opt = 'X')
+** EOC by Aplus05(Jahnavi)  SHDK925010 >>>>>>
+                    ( fieldname = 'RFQ_NO'          scrtext_l = TEXT-025    outputlen = 'X'     col_opt = 'X')
+                    ( fieldname = 'REMARK'          scrtext_l = TEXT-023    outputlen = 'X'     col_opt = 'X' )
+*                    ( fieldname = 'ERROR'      scrtext_l = TEXT-024    outputlen = 'X'     col_opt = 'X')
+                    ).
+
+  ENDMETHOD.
+
+  METHOD display_error.
+    CALL SCREEN 0200.
+  ENDMETHOD.
+
+  METHOD field_error.
+    it_fcat_error = VALUE #(
+                  ( fieldname = 'SRNO'      scrtext_l = TEXT-026    outputlen = 'X'     col_opt = 'X')
+                  ( fieldname = 'MSG_ERR'      scrtext_l = TEXT-027    outputlen = 'X'     col_opt = 'X')
+                  ).
+
+  ENDMETHOD.
+
+  METHOD download_template.
+
+    CONCATENATE '/usr/sap/' sy-sysid '/D00/data/upload/template'
+    INTO ls_file.
+
+    CONCATENATE ls_file '/ymm_ipa_new' INTO ls_file.
+
+*// Open dataset, From application server get the data
+    OPEN DATASET ls_file
+*      FOR INPUT IN TEXT MODE ENCODING DEFAULT. "NON-UNICODE.      "Comment by Jahnavi()
+      FOR INPUT IN TEXT MODE ENCODING NON-UNICODE.
+
+    IF sy-subrc <> 0.
+      MESSAGE TEXT-092 TYPE 'I'.
+      LEAVE LIST-PROCESSING.
+
+    ELSE.
+*// Read the data from app server and put into variable
+      DO.
+        READ DATASET ls_file INTO lv_data.
+*// Append workarea to internal table
+        IF sy-subrc = 0.
+          IF lv_data CN '#'.
+            lv_len = strlen( lv_data ).
+            lv_len = lv_len - 1.
+            lv_data = lv_data+0(lv_len).
+          ENDIF.
+          ls_final-var1 = lv_data.
+          APPEND ls_final TO lt_final.
+          CLEAR ls_final.
+        ELSE.
+          EXIT.
+        ENDIF.
+      ENDDO.
+    ENDIF.
+
+*// Split file name and put in to internal table
+    SPLIT ls_file AT '/' INTO TABLE lt_final1.
+
+*// Count how many records in internal table
+    DATA(lv_count) = lines( lt_final1 ).
+
+    READ TABLE lt_final1 INTO DATA(ls_final1) INDEX lv_count.
+
+*// close the path
+    CLOSE DATASET ls_file.
+
+    CALL METHOD cl_gui_frontend_services=>file_save_dialog
+      EXPORTING
+        window_title      = 'File Directory'
+        default_extension = 'csv'
+        initial_directory = 'D:\'
+      CHANGING
+        filename          = lv_filename
+        path              = lv_path1
+        fullpath          = lv_fullpath
+        user_action       = lv_result.
+
+    lv_path = lv_fullpath.
+
+*// Fm for download the file into presenation server
+    CALL FUNCTION 'GUI_DOWNLOAD'
+      EXPORTING
+        filename                  = lv_path
+        filetype                  = 'ASC'
+        write_field_separator     = 'X'
+        trunc_trailing_blanks     = 'X'
+        trunc_trailing_blanks_eol = 'X'
+        write_lf_after_last_line  = ' '
+      TABLES
+        data_tab                  = lt_final
+      EXCEPTIONS
+        file_write_error          = 1
+        no_batch                  = 2
+        gui_refuse_filetransfer   = 3
+        invalid_type              = 4
+        no_authority              = 5
+        unknown_error             = 6
+        header_not_allowed        = 7
+        separator_not_allowed     = 8
+        filesize_not_allowed      = 9
+        header_too_long           = 10
+        dp_error_create           = 11
+        dp_error_send             = 12
+        dp_error_write            = 13
+        unknown_dp_error          = 14
+        access_denied             = 15
+        dp_out_of_memory          = 16
+        disk_full                 = 17
+        dp_timeout                = 18
+        file_not_found            = 19
+        dataprovider_exception    = 20
+        control_flush_error       = 21
+        OTHERS                    = 22.
+
+    IF sy-subrc EQ 0.
+      MESSAGE: TEXT-093 TYPE 'I'.
+    ELSE.
+      MESSAGE: TEXT-094 TYPE 'I'.
+    ENDIF.
+
+    REFRESH : lt_final.                         "Added by Jahnavi
+
+  ENDMETHOD.
+ENDCLASS.
+
+
+*&---------------------------------------------------------------------*
+*& Include          YMM_INFO_REC_IPA_SUB
+*&---------------------------------------------------------------------*
+*&**********************************************************************
+*& Project               : Ather                                       *
+*& Module                : MM                                          *
+*& Object Name           : INCLUDE                                     *
+*& Functional Consultant : Yogesh/Rajani                               *
+*& Technical Consultant  : Vamsi krishna Mudunuri                      *
+*& Development Request   : BSOFT-58673                                 *
+*& Transaction Code      : YMM_IPA_NEW                                 *
+*& Description           : New Upload Program for RFQ Creation         *
+*& Package               : ZMM                                         *
+*&---------------------------------------------------------------------*
+
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'STATUS'.
+  SET TITLEBAR 'TITLE'.
+
+*  CLEAR  obj1->g_container.
+  IF obj1->g_container IS   INITIAL.
+    CREATE OBJECT obj1->g_container
+      EXPORTING
+        container_name              = 'CC'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+    IF sy-subrc = 0.
+      CREATE OBJECT obj1->g_grid ##SUBRC_OK
+        EXPORTING
+          i_parent          = obj1->g_container
+        EXCEPTIONS
+          error_cntl_create = 1
+          error_cntl_init   = 2
+          error_cntl_link   = 3
+          error_dp_create   = 4
+          OTHERS            = 5.
+    ENDIF.
+  ENDIF.
+
+  c1=>field_cat( ).
+
+  CALL METHOD obj1->g_grid->set_table_for_first_display
+    CHANGING
+      it_outtab                     = it_update_data
+      it_fieldcatalog               = it_fieldcat
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0 ##NEEDED.
+* Implement suitable error handling here
+  ENDIF.
+
+  CALL METHOD obj1->g_grid->set_ready_for_input
+    EXPORTING
+      i_ready_for_input = 1.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100   INPUT .
+  DATA: lv_flag TYPE c.
+  CALL METHOD obj1->g_grid->check_changed_data
+    IMPORTING
+      e_valid = DATA(l_valid) ##NEEDED.
+*  CLEAR : l_valid.
+  CASE sy-ucomm.
+
+    WHEN 'BACK'.
+      LEAVE TO SCREEN 0 .
+    WHEN 'EXIT'.
+      LEAVE TO SCREEN 0 .
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0 .
+    WHEN 'SEL_ALL'.
+      LOOP AT it_update_data INTO wa_update_data.
+        wa_update_data-chk = abap_true.
+        MODIFY it_update_data FROM wa_update_data TRANSPORTING chk.
+        CLEAR wa_update_data.
+      ENDLOOP.
+    WHEN 'DSELL_ALL'.
+      LOOP AT it_update_data INTO wa_update_data.
+        wa_update_data-chk = abap_false.
+        MODIFY it_update_data FROM wa_update_data TRANSPORTING chk.
+        CLEAR wa_update_data.
+      ENDLOOP.
+    WHEN 'SAVE'.
+*      READ TABLE it_update_data INTO DATA(wa_update) WITH KEY chk = 'X' rfq_no = ' '.
+*      if sy-subrc
+      DATA(wa_update) = REDUCE ty_update_data(
+        INIT result = VALUE ty_update_data( )
+        FOR wa IN it_update_data
+        NEXT result = COND #(
+          WHEN wa-chk = 'X' AND
+               wa-rfq_no IS NOT INITIAL
+          THEN wa
+          ELSE result ) ).
+
+      IF wa_update IS NOT INITIAL.
+        MESSAGE TEXT-031 TYPE 'I'.
+        RETURN.
+      ELSE.
+
+        CONCATENATE sy-datum+6(2) '.' sy-datum+4(2) '.' sy-datum+0(4) INTO lv_cdate.
+        ls_date1 = sy-datum + 1.
+        CONCATENATE ls_date1+6(2) '.' ls_date1+4(2) '.' ls_date1+0(4) INTO lv_cdate1.
+
+        SELECT ekorg,werks FROM t001w
+          INTO TABLE @DATA(lt_ekorg)
+          FOR ALL ENTRIES IN @it_update_data
+          WHERE werks = @it_update_data-werks.
+
+        SELECT lgort,matnr,werks FROM mard
+          INTO TABLE @DATA(lt_mard)
+          FOR ALL ENTRIES IN @it_update_data
+          WHERE werks = @it_update_data-werks
+          AND   matnr = @it_update_data-matnr.
+
+        READ TABLE it_update_data INTO wa_update_data WITH KEY chk = 'X'.
+        IF sy-subrc = 0.
+          READ TABLE lt_ekorg INTO DATA(wa_ekorg) WITH KEY werks = wa_update_data-werks.
+
+          REFRESH t_bdcdata.
+          PERFORM bdc_dynpro      USING 'SAPMM06E' '0300'.
+          PERFORM bdc_field       USING 'BDC_CURSOR'
+                                        'EKKO-ANGDT'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '=KOPF'.
+          PERFORM bdc_field       USING 'RM06E-ASART'
+                                        'ZAN'.
+          PERFORM bdc_field       USING 'EKKO-SPRAS'
+                                        'EN'.
+          PERFORM bdc_field       USING 'RM06E-ANFDT'
+                                        lv_cdate.
+          PERFORM bdc_field       USING 'EKKO-ANGDT'
+                                        lv_cdate1.
+          PERFORM bdc_field       USING 'EKKO-EKORG'
+                                        wa_ekorg-ekorg.
+          PERFORM bdc_field       USING 'EKKO-EKGRP'
+                                        'P01'.
+          PERFORM bdc_field       USING 'RM06E-LPEIN'
+                                        'T'.
+          PERFORM bdc_field       USING 'RM06E-WERKS'
+                                         "'M002'.
+                                         wa_update_data-werks.
+          PERFORM bdc_dynpro      USING 'SAPMM06E' '0301'.
+          PERFORM bdc_field       USING 'BDC_CURSOR'
+                                        'EKKO-KDATE'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '=AB'.
+          PERFORM bdc_field       USING 'EKKO-EKGRP'
+                                        'P01'.
+          PERFORM bdc_field       USING 'EKKO-PINCR'
+                                        '10'.
+          wa_update_data-lifnr = |{ wa_update_data-lifnr ALPHA = OUT } |.
+          CONCATENATE wa_update_data-lifnr sy-datum+4(2) sy-datum+2(2) INTO collec_no.
+          PERFORM bdc_field       USING 'EKKO-SUBMI'
+                                        collec_no. " Collective No
+          PERFORM bdc_field       USING 'EKKO-SPRAS'
+                                        'EN'.
+          PERFORM bdc_field       USING 'EKKO-UPINC'
+                                        '1'.
+          PERFORM bdc_field       USING 'EKKO-ANGDT'
+                                        lv_cdate1.
+          PERFORM bdc_field       USING 'EKKO-KDATB'
+                                        lv_cdate1.
+          del_date = sy-datum + 3.
+
+          CONCATENATE  del_date+6(2) '.' del_date+4(2) '.' del_date+0(4)  INTO lv_deldate.
+          PERFORM bdc_field       USING 'EKKO-KDATE'
+                                        lv_deldate." delivery date
+          CLEAR: ls_num.
+
+          lv_item = 10.
+          CONDENSE lv_item.
+          LOOP AT it_update_data INTO DATA(wa_update_data1) WHERE chk = 'X'.
+            ls_num = ls_num + 1.
+            wa_update_data1-del_date = lv_deldate.
+            IF ls_num > 15.
+              lv_item = lv_item + 10.
+              CONDENSE lv_item.
+              PERFORM bdc_dynpro      USING 'SAPMM06E' '0320'.
+              PERFORM bdc_field       USING 'RM06E-EBELP' lv_item.
+              PERFORM bdc_field       USING 'BDC_OKCODE'
+                                          '/00'.
+            ENDIF.
+
+            CONDENSE ls_num.
+            PERFORM bdc_dynpro      USING 'SAPMM06E' '0320'.
+            PERFORM bdc_field       USING 'BDC_CURSOR'
+                                          'EKPO-LGORT(01)'.
+            PERFORM bdc_field       USING 'BDC_OKCODE'
+                                          '/00'.
+            PERFORM bdc_field       USING 'EKKO-ANGDT'
+                                          lv_cdate1.
+            IF ls_num > 15.
+              ls_num = 15.
+              CONDENSE: ls_num.
+              PERFORM bdc_field       USING 'RM06E-EBELP' lv_item.
+            ELSE.
+              PERFORM bdc_field       USING 'RM06E-EBELP' '10'.
+            ENDIF.
+
+            CONCATENATE  'EKPO-EMATN' '(' ls_num ')' INTO lv_field1.
+            PERFORM bdc_field       USING lv_field1
+                                          wa_update_data1-matnr.
+            CONCATENATE 'RM06E-ANMNG' '(' ls_num ')' INTO lv_field2.
+            PERFORM bdc_field       USING lv_field2
+                                          '1'.  " qty
+            CONCATENATE 'RM06E-EEIND' '(' ls_num ')' INTO lv_field3.
+
+            PERFORM bdc_field       USING lv_field3
+                                          lv_deldate. "" DELIVERY DATE
+            CONCATENATE 'EKPO-WERKS' '(' ls_num ')' INTO lv_field4.
+            PERFORM bdc_field       USING lv_field4
+                                          wa_update_data1-werks.
+            CONCATENATE 'EKPO-LGORT' '(' ls_num ')' INTO lv_field5.
+
+            READ TABLE lt_mard INTO DATA(wa_mard) WITH KEY werks = wa_update_data1-werks
+                                                           matnr = wa_update_data1-matnr.
+
+            PERFORM bdc_field       USING lv_field5
+                                          wa_mard-lgort.
+
+
+            CLEAR: wa_update_data1.
+          ENDLOOP.
+          " com
+          PERFORM bdc_dynpro      USING 'SAPMM06E' '0320'.
+          PERFORM bdc_field       USING 'BDC_CURSOR'
+                                        'EKKO-ANGDT'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '=LS'.
+
+          PERFORM bdc_field       USING 'EKKO-ANGDT'
+                                       lv_cdate1.
+          PERFORM bdc_field       USING 'RM06E-EBELP'
+                                        '10'.           "" SEE
+          PERFORM bdc_dynpro      USING 'SAPMM06E' '0140'.
+          PERFORM bdc_field       USING 'BDC_CURSOR'
+                                        'EKKO-LIFNR'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '/00'.
+          PERFORM bdc_field       USING 'EKKO-LIFNR'
+                                        wa_update_data-lifnr.
+          PERFORM bdc_dynpro      USING 'SAPMM06E' '0140'.
+          PERFORM bdc_field       USING 'BDC_CURSOR'
+                                        'EKKO-LIFNR'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '=BU'.
+          PERFORM bdc_field       USING 'EKKO-LIFNR'
+                                        wa_update_data-lifnr.
+          PERFORM bdc_dynpro      USING 'SAPLSPO1' '0300'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'
+                                        '=YES'.
+
+          opt-defsize = abap_true.
+          opt-updmode = 'S'.
+          opt-dismode = 'N'.
+
+          CLEAR: t_msg,it_output,w_msg1,t_msg.
+          CALL TRANSACTION 'ME41' USING t_bdcdata OPTIONS FROM opt MESSAGES INTO t_msg.
+
+*            IF sy-subrc EQ 0.
+          DELETE t_msg WHERE msgtyp = 'W'.
+          LOOP AT t_msg INTO w_msg WHERE msgtyp EQ 'S' AND msgid = '06' AND msgnr = '017'.
+            lv_flg = 'X'.
+*     Format Message
+            CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+              EXPORTING
+                msgid               = w_msg-msgid
+                msgnr               = w_msg-msgnr
+                msgv1               = w_msg-msgv1
+                msgv2               = w_msg-msgv2
+                msgv3               = w_msg-msgv3
+                msgv4               = w_msg-msgv4
+              IMPORTING
+                message_text_output = w_msg1.
+            lv_srno = lv_srno + 1.
+            wa_output-srno = lv_srno.
+            wa_output-msg_err = w_msg1.
+            APPEND wa_output TO it_output.
+            CLEAR wa_output.
+          ENDLOOP.
+          IF it_output IS NOT INITIAL.
+            READ TABLE t_msg INTO w_msg WITH KEY msgid = '06' msgtyp = 'S' msgnr = '017'.
+            IF sy-subrc = 0.
+              LOOP AT it_update_data INTO wa_update_data WHERE chk = 'X' ##INTO_OK.
+                wa_info-zsa_matnr          = wa_update_data-matnr.
+                wa_info-zsa_werks          = wa_update_data-werks.
+                wa_info-zlifnr = |{ wa_update_data-lifnr ALPHA = IN } |.
+*                wa_info-ekgrp              = wa_update_data-ekgrp.
+                wa_info-ekorg              = wa_update_data-ekorg.
+                wa_info-aplfz              = wa_update_data-aplfz.
+                wa_info-norbm              = wa_update_data-norbm.
+                wa_info-dlvry_date         = lv_deldate.
+                wa_info-collective_num     = collec_no.
+                wa_info-zjira_id           = wa_update_data-jira_id.
+                wa_info-zprice_valid_from  = wa_update_data-datab .
+                wa_info-zprice_valid_to    = wa_update_data-datbi.
+                wa_info-mwskz              = wa_update_data-mwskz.
+*                wa_info-zold_total         = wa_update_data-netpr.
+                wa_info-zrfq_ebeln         = w_msg-msgv2.
+                ls_num1 = ls_num1 + 10.
+                CONDENSE ls_num1.
+                wa_info-zrfq_ebelp         = ls_num1.
+                wa_info-zstatus            = 'WIP'.
+                wa_info-esokz              = wa_update_data-esokz.
+                wa_info-prev_part          = wa_update_data-prev_part.
+                wa_info-remarks            = wa_update_data-remark.
+                wa_info-zinfo_type         = 'YMM_IPA_NEW'.
+
+" Added by vamsi  SHDK925010 | 25-02-2026
+                wa_info-mcp                = wa_update_data-mcp.
+                wa_info-ppc                = wa_update_data-ppc.
+                wa_info-zinput_rm           = wa_update_data-input_rm.
+                wa_info-zprocess_cost       = wa_update_data-process_cost.
+                wa_info-zbop_cost           = wa_update_data-bop_cost.
+                wa_info-zprofit             = wa_update_data-profit.
+                wa_info-zpacking            = wa_update_data-packing.
+                wa_info-zlogistics          = wa_update_data-logistics.
+                wa_info-zamorization        = wa_update_data-amorization.
+                wa_info-zoverheads          = wa_update_data-overheads.
+                wa_info-zmiscellaneous      = wa_update_data-miscellaneous.
+                wa_info-zforex_portion      = wa_update_data-forex_portion.
+                wa_info-zforex_currency     = wa_update_data-forex_currency.
+                wa_info-znew_total         = wa_update_data-new_prize.
+                wa_info-warr_dt_efe_from   = wa_update_data-warr_grn.
+                wa_info-warr_per_input     = wa_update_data-warr_per.
+                wa_info-link_sup_doc       = wa_update_data-sup_doc.
+                wa_info-factor             = wa_update_data-factor.
+                wa_info-currency             = wa_update_data-waers.
+" Eoc  SHDK925010
+                MODIFY zinfo FROM wa_info.
+                IF sy-subrc = 0.
+                  COMMIT WORK AND WAIT.
+                ENDIF.
+                CLEAR :wa_info.
+              ENDLOOP.
+              MESSAGE TEXT-028 TYPE 'S'.
+              LOOP AT it_update_data INTO wa_update_data WHERE chk = 'X'.
+                wa_update_data-rfq_no = w_msg-msgv2.
+                MODIFY it_update_data FROM wa_update_data TRANSPORTING rfq_no WHERE chk = 'X'.
+              ENDLOOP.
+            ENDIF.
+          ENDIF.
+
+          CALL METHOD obj1->g_grid->refresh_table_display.
+
+          IF lv_flg NE 'X'.
+            REFRESH  it_output.
+            LOOP AT t_msg INTO w_msg WHERE msgtyp EQ 'E'.
+*     Format Message
+              CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+                EXPORTING
+                  msgid               = w_msg-msgid
+                  msgnr               = w_msg-msgnr
+                  msgv1               = w_msg-msgv1
+                  msgv2               = w_msg-msgv2
+                  msgv3               = w_msg-msgv3
+                  msgv4               = w_msg-msgv4
+                IMPORTING
+                  message_text_output = w_msg1.
+              lv_srno = lv_srno + 1.
+              wa_output-srno = lv_srno.
+              CONCATENATE wa_output-msg_err w_msg1  INTO wa_output-msg_err  SEPARATED BY space.
+              CLEAR: w_msg1.
+              APPEND wa_output TO it_output.
+            ENDLOOP.
+            IF it_output IS NOT INITIAL.
+              c1=>display_error( ).
+            ENDIF.
+          ENDIF.
+*            ELSE.
+*              MESSAGE TEXT-029 TYPE 'I'.
+*              LEAVE TO LIST-PROCESSING.
+*            ENDIF.
+        ELSE.
+          MESSAGE TEXT-030 TYPE 'I'.
+          LEAVE TO LIST-PROCESSING.
+        ENDIF.
+
+      ENDIF.
+      CLEAR : wa_update,lv_flag,wa_update_data.
+  ENDCASE.
+  CALL METHOD obj1->g_grid->refresh_table_display.
+ENDMODULE.
+
+*
+*CLASS c1 IMPLEMENTATION.
+*
+*ENDCLASS.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0200 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0200 OUTPUT.
+  SET PF-STATUS 'MENU'.
+  SET TITLEBAR 'TITLE'.
+
+  CLEAR  obj2->g_container.
+  IF obj2->g_container IS   INITIAL.
+    CREATE OBJECT obj2->g_container
+      EXPORTING
+        container_name              = 'CC_LOG'               "
+      EXCEPTIONS
+        cntl_error                  = 1                " CNTL_ERROR
+        cntl_system_error           = 2                " CNTL_SYSTEM_ERROR
+        create_error                = 3                " CREATE_ERROR
+        lifetime_error              = 4                " LIFETIME_ERROR
+        lifetime_dynpro_dynpro_link = 5                " LIFETIME_DYNPRO_DYNPRO_LINK
+        OTHERS                      = 6.
+    IF sy-subrc = 0.
+      CREATE OBJECT obj2->g_grid ##SUBRC_OK
+        EXPORTING
+          i_parent          = obj2->g_container
+        EXCEPTIONS
+          error_cntl_create = 1
+          error_cntl_init   = 2
+          error_cntl_link   = 3
+          error_dp_create   = 4
+          OTHERS            = 5.
+    ENDIF.
+  ENDIF.
+
+  c1=>field_error( ).
+
+  CALL METHOD obj2->g_grid->set_table_for_first_display
+    CHANGING
+      it_outtab                     = it_output
+      it_fieldcatalog               = it_fcat_error
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0 ##NEEDED.
+* Implement suitable error handling here
+  ENDIF.
+
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0200 INPUT.
+  CASE sy-ucomm.
+
+    WHEN 'BACK'.
+      LEAVE TO SCREEN 0100.
+    WHEN 'EXIT'.
+      LEAVE TO SCREEN 0100.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0100.
+  ENDCASE.
+ENDMODULE.
+
+
+FORM bdc_dynpro USING program dynpro ##PERF_NO_TYPE.
+  CLEAR t_bdcdata.
+  t_bdcdata-program  = program.
+  t_bdcdata-dynpro   = dynpro.
+  t_bdcdata-dynbegin = 'X'.
+  APPEND t_bdcdata .
+ENDFORM.
+
+*----------------------------------------------------------------------*
+*        Insert field                                                  *
+*----------------------------------------------------------------------*
+FORM bdc_field USING fnam fval ##PERF_NO_TYPE.
+  IF fval <> nodata.
+    CLEAR t_bdcdata.
+    t_bdcdata-fnam = fnam.
+    t_bdcdata-fval = fval.
+    APPEND t_bdcdata.
+  ENDIF.
+ENDFORM.
